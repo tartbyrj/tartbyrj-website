@@ -74,22 +74,26 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
     <section class="mx-auto max-w-6xl px-6 py-20">
       <h2 class="works-heading text-2xl md:text-3xl font-light mb-10">Works in this Collection</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        {(collection.artworks ?? []).map((artwork: any) => (
-          <a href={`/works/${artwork.slug.current}`} class="group block work-link">
-            <div class="work-thumb aspect-square overflow-hidden">
-              {artwork.image && (
-                <img
-                  src={urlFor(artwork.image).width(800).height(800).format('webp').quality(85).url()}
-                  alt={artwork.title}
-                  loading="lazy"
-                  class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-              )}
-            </div>
-            <p class="work-title mt-3 text-sm tracking-wide">{artwork.title}</p>
-            {artwork.year && <p class="work-year text-xs">{artwork.year}</p>}
-          </a>
-        ))}
+        {/* A reference to a deleted or unpublished artwork dereferences to null,
+            which would crash the build on artwork.slug.current. */}
+        {(collection.artworks ?? [])
+          .filter((artwork: any) => artwork?.slug?.current)
+          .map((artwork: any) => (
+            <a href={`/works/${artwork.slug.current}`} class="group block work-link">
+              <div class="work-thumb aspect-square overflow-hidden">
+                {artwork.image && (
+                  <img
+                    src={urlFor(artwork.image).width(800).height(800).format('webp').quality(85).url()}
+                    alt={artwork.altText ?? artwork.title}
+                    loading="lazy"
+                    class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                )}
+              </div>
+              <p class="work-title mt-3 text-sm tracking-wide">{artwork.title}</p>
+              {artwork.year && <p class="work-year text-xs">{artwork.year}</p>}
+            </a>
+          ))}
       </div>
     </section>
   </div>
