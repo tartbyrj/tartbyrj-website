@@ -1,0 +1,91 @@
+/* src/styles/tokens.css */
+
+/* ─── LIGHT THEME (default) ─── */
+:root,
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-primary:     #faf7f4;
+  --bg-secondary:   #f2ede8;
+  --bg-elevated:    #e8e0d8;
+
+  /* Text */
+  --text-primary:   #1a1412;
+  --text-secondary: rgba(26, 20, 18, 0.52);
+  --text-muted:     rgba(26, 20, 18, 0.28);
+
+  /* Accent (warm sienna/bronze) */
+  --accent:         #7a4f2a;
+  --accent-dim:     rgba(122, 79, 42, 0.25);
+
+  /* Borders */
+  --border:         rgba(26, 20, 18, 0.09);
+  --border-strong:  rgba(26, 20, 18, 0.18);
+
+  /* Hero overlay */
+  --hero-overlay: linear-gradient(
+    to top,
+    rgba(250, 247, 244, 0.92) 0%,
+    rgba(250, 247, 244, 0.5) 40%,
+    transparent 100%
+  );
+
+  /* Hero fallback (shown when no featured artwork image) */
+  --hero-fallback: linear-gradient(160deg, #f5f0ea, #d4c4b0);
+
+  /* Availability status */
+  --available:     #4a6b4f;
+  --available-dim: rgba(74, 107, 79, 0.14);
+}
+
+/* ─── DARK THEME ─── */
+[data-theme="dark"] {
+  /* Backgrounds */
+  --bg-primary:     #080706;
+  --bg-secondary:   #100e0d;
+  --bg-elevated:    #181412;
+
+  /* Text */
+  --text-primary:   #f0ebe3;
+  --text-secondary: rgba(240, 235, 227, 0.55);
+  --text-muted:     rgba(240, 235, 227, 0.28);
+
+  /* Accent (warm gold) */
+  --accent:         #c9a96e;
+  --accent-dim:     rgba(201, 169, 110, 0.30);
+
+  /* Borders */
+  --border:         rgba(240, 235, 227, 0.08);
+  --border-strong:  rgba(240, 235, 227, 0.15);
+
+  /* Hero overlay */
+  --hero-overlay: linear-gradient(
+    to top,
+    rgba(8, 7, 6, 0.92) 0%,
+    rgba(8, 7, 6, 0.6) 40%,
+    transparent 100%
+  );
+
+  /* Hero fallback (shown when no featured artwork image) */
+  --hero-fallback: linear-gradient(160deg, #1c1815, #2b2119);
+
+  /* Availability status */
+  --available:     #8fb894;
+  --available-dim: rgba(143, 184, 148, 0.16);
+}
+
+/* ─── THEME-INVARIANT TOKENS ─── */
+:root {
+  /* Typography */
+  --font-serif:      'Cormorant Garamond', Georgia, serif;
+  --font-sans:       'Jost', system-ui, sans-serif;
+
+  /* Spacing */
+  --space-section:   100px;
+  --space-section-m: 56px;
+
+  /* Motion */
+  --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-base:        0.35s;
+  --dur-slow:        0.7s;
+  --dur-theme:       0.4s;     /* theme switch transition */
+}

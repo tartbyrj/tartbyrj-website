@@ -1,0 +1,454 @@
+---
+import { z } from 'zod';
+import Layout from '../layouts/Layout.astro';
+import { client, urlFor } from '../lib/sanity/client';
+import { FEATURED_ARTWORKS_QUERY, ALL_COLLECTIONS_QUERY } from '../lib/sanity/queries';
+import { ArtworkSchema } from '../types/artwork';
+import { CollectionSchema } from '../types/collection';
+
+const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
+const featuredResult = z.array(ArtworkSchema).safeParse(featuredRaw);
+const featuredArtworks = featuredResult.success ? featuredResult.data : [];
+
+const collectionsRaw = await client.fetch(ALL_COLLECTIONS_QUERY).catch(() => null);
+const collectionsResult = z.array(CollectionSchema).safeParse(collectionsRaw);
+const collections = collectionsResult.success ? collectionsResult.data : [];
+
+const heroImage = featuredArtworks[0]?.image;
+const heroUrl = heroImage ? urlFor(heroImage).width(1920).format('webp').url() : undefined;
+
+const featuredCollection = collections[0];
+const featuredCollectionUrl = featuredCollection?.coverImage
+  ? urlFor(featuredCollection.coverImage).width(1000).format('webp').quality(85).url()
+  : undefined;
+---
+
+<Layout title="Home">
+  <section class="hero">
+    {heroUrl ? (
+      <img class="hero-media" src={heroUrl} alt={featuredArtworks[0]?.altText ?? featuredArtworks[0]?.title ?? ''} loading="eager" />
+    ) : (
+      <div class="hero-media hero-media-fallback"></div>
+    )}
+    <div class="hero-overlay"></div>
+
+    <div class="hero-content">
+      <p class="hero-eyebrow">T.Art by RJ · Murals · Paintings · Drawings</p>
+      <h1 class="hero-name">
+        <span>Rupjyoti</span> <span class="hero-name-accent">Baruah</span>
+      </h1>
+      <p class="hero-subtitle">Material Memory · Mark Making</p>
+    </div>
+
+    <div class="hero-scroll">
+      <span class="hero-scroll-line"></span>
+      <span class="hero-scroll-text">Scroll</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2 class="section-title">Selected Works</h2>
+      <a class="section-link" href="/works">View all →</a>
+    </div>
+
+    {featuredArtworks.length > 0 ? (
+      <div class="works-grid">
+        {featuredArtworks.map((artwork, i) => (
+          <a
+            class:list={['work-card', 'reveal', i === 0 && 'work-card-wide']}
+            href={`/works/${artwork.slug.current}`}
+          >
+            {artwork.image && (
+              <img
+                src={urlFor(artwork.image).width(1200).format('webp').quality(85).url()}
+                alt={artwork.altText ?? artwork.title}
+                loading="lazy"
+              />
+            )}
+            <div class="work-card-overlay">
+              <p class="work-card-title">{artwork.title}</p>
+              <p class="work-card-meta">
+                {[artwork.medium, artwork.year].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <div class="works-grid">
+        <div class="work-placeholder work-card-wide reveal"></div>
+        <div class="work-placeholder reveal"></div>
+        <div class="work-placeholder reveal"></div>
+      </div>
+    )}
+  </section>
+
+  <section class="collection-section">
+    <div class="collection-inner">
+      <div class="collection-text reveal">
+        <p class="label">Featured Collection</p>
+        {featuredCollection ? (
+          <>
+            <h2 class="collection-title">{featuredCollection.title}</h2>
+            {featuredCollection.description && (
+              <p class="collection-desc">{featuredCollection.description}</p>
+            )}
+            <a class="collection-link" href={`/collections/${featuredCollection.slug.current}`}>
+              View collection →
+            </a>
+          </>
+        ) : (
+          <>
+            <h2 class="collection-title">Collections in progress</h2>
+            <p class="collection-desc">
+              Series and bodies of work will appear here as they are added.
+            </p>
+            <a class="collection-link" href="/collections">Browse collections →</a>
+          </>
+        )}
+      </div>
+
+      <div class="collection-media reveal">
+        {featuredCollectionUrl ? (
+          <img src={featuredCollectionUrl} alt={featuredCollection?.title ?? ''} loading="lazy" />
+        ) : (
+          <div class="collection-media-fallback"></div>
+        )}
+      </div>
+    </div>
+  </section>
+
+  <section class="about-teaser">
+    <p class="label about-label">T.Art by RJ</p>
+    <h2 class="about-heading">Artist · Muralist · Storyteller</h2>
+    <p class="about-body">
+      Through murals, drawing and public art, Rupjyoti Baruah explores the stories carried by
+      people, places and living beings.
+    </p>
+    <a class="collection-link" href="/about">Read more →</a>
+  </section>
+</Layout>
+
+<style>
+  .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  /* ─── HERO ─── */
+  .hero {
+    position: relative;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .hero-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hero-media-fallback {
+    background: var(--hero-fallback);
+  }
+
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--hero-overlay);
+  }
+
+  .hero-content {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    padding: 60px 52px;
+    max-width: 900px;
+  }
+
+  .hero-eyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-secondary);
+    margin: 0 0 18px;
+    animation: fade-up 0.9s var(--ease-out) 0.1s both;
+  }
+
+  .hero-name {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(46px, 9vw, 108px);
+    line-height: 0.98;
+    color: var(--text-primary);
+    margin: 0;
+    animation: fade-up 0.9s var(--ease-out) 0.25s both;
+  }
+
+  .hero-name-accent {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .hero-subtitle {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 20px 0 0;
+    animation: fade-up 0.9s var(--ease-out) 0.4s both;
+  }
+
+  .hero-scroll {
+    position: absolute;
+    right: 52px;
+    bottom: 60px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: fade-up 0.9s var(--ease-out) 0.6s both;
+  }
+
+  .hero-scroll-line {
+    display: block;
+    width: 46px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  .hero-scroll-text {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--text-secondary);
+  }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(26px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ─── SELECTED WORKS ─── */
+  .section {
+    padding: var(--space-section) 52px;
+    background: var(--bg-primary);
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 42px;
+  }
+
+  .section-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 44px);
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .section-link,
+  .collection-link {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .section-link:hover,
+  .collection-link:hover {
+    color: var(--accent);
+  }
+
+  .works-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+  }
+
+  .work-card {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    text-decoration: none;
+  }
+
+  .work-card-wide {
+    grid-column: span 2;
+    aspect-ratio: auto;
+  }
+
+  .work-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-slow) var(--ease-out);
+  }
+
+  .work-card:hover img {
+    transform: scale(1.03);
+  }
+
+  .work-card-overlay {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 20px 22px;
+    background: var(--hero-overlay);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity var(--dur-base) ease, transform var(--dur-base) var(--ease-out);
+  }
+
+  .work-card:hover .work-card-overlay,
+  .work-card:focus-visible .work-card-overlay {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .work-card-title {
+    font-family: var(--font-serif);
+    font-size: 19px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .work-card-meta {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-secondary);
+    margin: 5px 0 0;
+  }
+
+  .work-placeholder {
+    aspect-ratio: 4 / 5;
+    background: var(--bg-secondary);
+  }
+
+  .work-placeholder.work-card-wide {
+    aspect-ratio: 16 / 10;
+  }
+
+  /* ─── FEATURED COLLECTION ─── */
+  .collection-section {
+    padding: var(--space-section) 52px;
+    background: var(--bg-secondary);
+  }
+
+  .collection-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+
+  .collection-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 46px);
+    color: var(--text-primary);
+    margin: 14px 0 0;
+  }
+
+  .collection-desc {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 18px 0 26px;
+    max-width: 46ch;
+  }
+
+  .collection-media img,
+  .collection-media-fallback {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    display: block;
+  }
+
+  .collection-media-fallback {
+    background: var(--bg-elevated);
+  }
+
+  /* ─── ABOUT TEASER ─── */
+  .about-teaser {
+    padding: var(--space-section) 52px;
+    background: var(--bg-primary);
+    text-align: center;
+  }
+
+  .about-label {
+    color: var(--accent);
+  }
+
+  .about-heading {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(26px, 4vw, 42px);
+    color: var(--text-primary);
+    margin: 16px 0 0;
+  }
+
+  .about-body {
+    color: var(--text-secondary);
+    line-height: 1.75;
+    max-width: 56ch;
+    margin: 20px auto 26px;
+  }
+
+  @media (max-width: 900px) {
+    .section,
+    .collection-section,
+    .about-teaser {
+      padding: var(--space-section-m) 24px;
+    }
+
+    .hero-content {
+      padding: 40px 24px;
+    }
+
+    .hero-scroll {
+      display: none;
+    }
+
+    .works-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .work-card-wide {
+      grid-column: span 1;
+    }
+
+    .collection-inner {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-eyebrow,
+    .hero-name,
+    .hero-subtitle,
+    .hero-scroll {
+      animation: none;
+    }
+  }
+</style>

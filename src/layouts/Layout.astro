@@ -1,0 +1,426 @@
+---
+import '../styles/global.css';
+import ThemeToggle from '../components/ui/ThemeToggle.astro';
+
+export interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+}
+
+const {
+  title,
+  description = 'Original paintings and fine art by Rupjyoti Baruah — T.Art by RJ.',
+  ogImage,
+} = Astro.props;
+
+const fontFiles = [
+  'CormorantGaramond-Light',
+  'CormorantGaramond-LightItalic',
+  'CormorantGaramond-Regular',
+  'CormorantGaramond-Italic',
+  'Jost-Light',
+  'Jost-Regular',
+  'Jost-Medium',
+];
+
+const navLinks = [
+  { label: 'Works', href: '/works' },
+  { label: 'Collections', href: '/collections' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+];
+---
+
+<html lang="en">
+  <head>
+    <script is:inline>
+      const s = localStorage.getItem('theme');
+      const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', s || sys || 'light');
+    </script>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{title} — T.Art by RJ</title>
+
+    {fontFiles.map((file) => (
+      <link rel="preload" href={`/fonts/${file}.woff2`} as="font" type="font/woff2" crossorigin />
+    ))}
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={`${title} — T.Art by RJ`} />
+    <meta property="og:description" content={description} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+
+    <slot name="jsonld" />
+  </head>
+  <body>
+    <div class="cursor" id="cursor"></div>
+    <div class="cursor-ring" id="cursor-ring"></div>
+
+    <nav id="nav">
+      <a href="/" class="nav-logo">T.Art by RJ</a>
+      <div class="nav-right">
+        <div class="nav-links">
+          {navLinks.map((link) => (
+            <a href={link.href}>{link.label}</a>
+          ))}
+        </div>
+        <ThemeToggle />
+        <button id="menu-toggle" class="hamburger" aria-label="Open menu" aria-expanded="false">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+
+    <div id="mobile-menu" class="mobile-menu">
+      <button id="menu-close" class="menu-close" aria-label="Close menu">✕</button>
+      {navLinks.map((link) => (
+        <a href={link.href}>{link.label}</a>
+      ))}
+    </div>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer>
+      <div class="footer-logo">T.Art by RJ</div>
+      <div class="footer-links">
+        <a href="/works">Works</a>
+        <a href="/collections">Collections</a>
+        <a href="/about">About</a>
+      </div>
+      <div class="footer-copy">© 2025 Rupjyoti Baruah</div>
+    </footer>
+
+    <script is:inline>
+      (function () {
+        var nav = document.getElementById('nav');
+        window.addEventListener('scroll', function () {
+          if (window.scrollY > 60) {
+            nav.classList.add('scrolled');
+          } else {
+            nav.classList.remove('scrolled');
+          }
+        });
+      })();
+
+      (function () {
+        var toggle = document.getElementById('menu-toggle');
+        var close = document.getElementById('menu-close');
+        var menu = document.getElementById('mobile-menu');
+
+        function openMenu() {
+          menu.classList.add('open');
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+        function closeMenu() {
+          menu.classList.remove('open');
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        toggle.addEventListener('click', openMenu);
+        close.addEventListener('click', closeMenu);
+        menu.querySelectorAll('a').forEach(function (a) {
+          a.addEventListener('click', closeMenu);
+        });
+      })();
+
+      (function () {
+        var targets = document.querySelectorAll('.reveal');
+        if (!targets.length) return;
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.1 }
+        );
+        targets.forEach(function (t) {
+          observer.observe(t);
+        });
+      })();
+
+      (function () {
+        var mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+        if (!mq.matches) return;
+
+        var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var cursor = document.getElementById('cursor');
+        var ring = document.getElementById('cursor-ring');
+
+        var mouseX = 0, mouseY = 0;
+        var ringX = 0, ringY = 0;
+
+        window.addEventListener('mousemove', function (e) {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+          cursor.style.left = mouseX + 'px';
+          cursor.style.top = mouseY + 'px';
+          if (reduceMotion) {
+            ring.style.left = mouseX + 'px';
+            ring.style.top = mouseY + 'px';
+          }
+        });
+
+        function loop() {
+          if (!reduceMotion) {
+            ringX += (mouseX - ringX) * 0.12;
+            ringY += (mouseY - ringY) * 0.12;
+            ring.style.left = ringX + 'px';
+            ring.style.top = ringY + 'px';
+          }
+          requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        document.querySelectorAll('a, button').forEach(function (el) {
+          el.addEventListener('mouseenter', function () {
+            cursor.classList.add('cursor-hover');
+            ring.classList.add('cursor-hover');
+          });
+          el.addEventListener('mouseleave', function () {
+            cursor.classList.remove('cursor-hover');
+            ring.classList.remove('cursor-hover');
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
+
+<style>
+  body {
+    margin: 0;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    body {
+      cursor: none;
+    }
+  }
+
+  .cursor,
+  .cursor-ring {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    border-radius: 50%;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+  }
+
+  .cursor {
+    width: 9px;
+    height: 9px;
+    background: var(--accent);
+    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out);
+  }
+
+  .cursor-ring {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--accent);
+    opacity: 0.5;
+    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out);
+  }
+
+  .cursor.cursor-hover {
+    width: 5px;
+    height: 5px;
+  }
+
+  .cursor-ring.cursor-hover {
+    width: 50px;
+    height: 50px;
+  }
+
+  @media (hover: none) {
+    .cursor,
+    .cursor-ring {
+      display: none;
+    }
+  }
+
+  #nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 52px;
+    background: transparent;
+    transition: background var(--dur-base) ease, border-color var(--dur-base) ease;
+  }
+
+  #nav.scrolled {
+    background: color-mix(in srgb, var(--bg-primary) 93%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .nav-links a {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .nav-links a:hover {
+    color: var(--accent);
+  }
+
+  .hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .hamburger span {
+    display: block;
+    width: 22px;
+    height: 1px;
+    background: var(--text-primary);
+  }
+
+  .mobile-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+  }
+
+  .mobile-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .mobile-menu a {
+    font-family: var(--font-serif);
+    font-size: clamp(28px, 6vw, 42px);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .menu-close {
+    position: absolute;
+    top: 22px;
+    right: 24px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  @media (max-width: 900px) {
+    #nav {
+      padding: 18px 24px;
+    }
+
+    .nav-links {
+      display: none;
+    }
+
+    .hamburger {
+      display: flex;
+    }
+  }
+
+  footer {
+    padding: 40px 52px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .footer-logo {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    color: var(--text-primary);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 24px;
+  }
+
+  .footer-links a {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .footer-links a:hover {
+    color: var(--accent);
+  }
+
+  .footer-copy {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+</style>

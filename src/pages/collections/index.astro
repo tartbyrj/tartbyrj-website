@@ -1,0 +1,117 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { client, urlFor } from '../../lib/sanity/client';
+
+const collections = await client.fetch(`
+  *[_type == "collection" && defined(slug.current)] | order(year desc){
+    title,
+    year,
+    location,
+    coverImage,
+    "slug": slug.current,
+    "artworkCount": count(artworks)
+  }
+`);
+---
+
+<Layout title="Collections">
+  <header class="page-head">
+    <h1 class="page-title">Collections</h1>
+  </header>
+
+  <section class="collections-grid">
+    {collections.map((collection: any) => (
+      <a href={`/collections/${collection.slug}`} class="collection-card reveal">
+        <div class="collection-card-media">
+          {collection.coverImage && (
+            <img
+              src={urlFor(collection.coverImage).width(900).height(1125).format('webp').quality(85).url()}
+              alt={collection.title}
+              loading="lazy"
+            />
+          )}
+        </div>
+        <h2 class="collection-card-title">{collection.title}</h2>
+        <p class="collection-card-meta">
+          {[collection.location, collection.year].filter(Boolean).join(' · ')}
+          {collection.artworkCount > 0 && (
+            <span> · {collection.artworkCount} {collection.artworkCount === 1 ? 'work' : 'works'}</span>
+          )}
+        </p>
+      </a>
+    ))}
+  </section>
+</Layout>
+
+<style>
+  .page-head {
+    padding: 140px 52px 30px;
+    background: var(--bg-primary);
+  }
+
+  .page-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(38px, 7vw, 76px);
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .collections-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 40px;
+    padding: 0 52px var(--space-section);
+    background: var(--bg-primary);
+  }
+
+  .collection-card {
+    display: block;
+    text-decoration: none;
+  }
+
+  .collection-card-media {
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .collection-card-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-slow) var(--ease-out);
+  }
+
+  .collection-card:hover .collection-card-media img {
+    transform: scale(1.05);
+  }
+
+  .collection-card-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--text-primary);
+    margin: 16px 0 0;
+    letter-spacing: 0.02em;
+  }
+
+  .collection-card-meta {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-secondary);
+    margin: 5px 0 0;
+  }
+
+  @media (max-width: 700px) {
+    .page-head {
+      padding: 120px 24px 24px;
+    }
+
+    .collections-grid {
+      grid-template-columns: 1fr;
+      gap: 32px;
+      padding: 0 24px var(--space-section-m);
+    }
+  }
+</style>

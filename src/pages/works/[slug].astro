@@ -1,0 +1,196 @@
+---
+import { z } from 'zod';
+import Layout from '../../layouts/Layout.astro';
+import { client, urlFor } from '../../lib/sanity/client';
+import { ALL_ARTWORKS_QUERY, ARTWORK_BY_SLUG_QUERY } from '../../lib/sanity/queries';
+import { ArtworkSchema } from '../../types/artwork';
+
+export async function getStaticPaths() {
+  const raw = await client.fetch(ALL_ARTWORKS_QUERY).catch(() => null);
+  const result = z.array(ArtworkSchema).safeParse(raw);
+  const artworks = result.success ? result.data : [];
+
+  return artworks.map((a) => ({ params: { slug: a.slug.current } }));
+}
+
+const { slug } = Astro.params;
+
+const raw = await client.fetch(ARTWORK_BY_SLUG_QUERY, { slug }).catch(() => null);
+const result = ArtworkSchema.safeParse(raw);
+
+if (!result.success) {
+  return Astro.redirect('/works');
+}
+
+const artwork = result.data;
+
+const imageUrl = artwork.image
+  ? urlFor(artwork.image).width(1400).format('webp').quality(90).url()
+  : undefined;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'VisualArtwork',
+  name: artwork.title,
+  image: artwork.image ? urlFor(artwork.image).width(1200).url() : undefined,
+  creator: { '@type': 'Person', name: 'Rupjyoti Baruah' },
+  artMedium: artwork.medium,
+  dateCreated: artwork.year,
+};
+
+const meta = [artwork.year, artwork.medium, artwork.dimensions].filter(Boolean).join(' · ');
+---
+
+<Layout title={artwork.title}>
+  <script type="application/ld+json" slot="jsonld" is:inline set:html={JSON.stringify(jsonLd)} />
+
+  <div class="detail">
+    <div class="detail-media">
+      {imageUrl ? (
+        <img src={imageUrl} alt={artwork.altText ?? artwork.title} loading="eager" />
+      ) : (
+        <div class="detail-media-fallback"></div>
+      )}
+    </div>
+
+    <div class="detail-info">
+      {artwork.collection?.slug && artwork.collection.title && (
+        <a class="detail-collection" href={`/collections/${artwork.collection.slug.current}`}>
+          {artwork.collection.title}
+        </a>
+      )}
+
+      <h1 class="detail-title">{artwork.title}</h1>
+
+      {meta && <p class="detail-meta">{meta}</p>}
+
+      <div class="detail-status">
+        {artwork.available ? (
+          <span class="badge">Available</span>
+        ) : (
+          <span class="not-for-sale">Not for sale</span>
+        )}
+      </div>
+
+      {artwork.available && artwork.price !== undefined && (
+        <p class="detail-price">${artwork.price.toLocaleString('en-US')}</p>
+      )}
+
+      <a class="detail-back" href="/works">← All works</a>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .detail {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 60px;
+    padding: 140px 52px var(--space-section);
+    background: var(--bg-primary);
+    align-items: start;
+  }
+
+  .detail-media {
+    position: sticky;
+    top: 100px;
+  }
+
+  .detail-media img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .detail-media-fallback {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    background: var(--bg-secondary);
+  }
+
+  .detail-collection {
+    display: inline-block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .detail-collection:hover {
+    color: var(--accent);
+  }
+
+  .detail-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(32px, 5vw, 60px);
+    line-height: 1.05;
+    color: var(--text-primary);
+    margin: 16px 0 0;
+  }
+
+  .detail-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 20px 0 0;
+  }
+
+  .detail-status {
+    margin-top: 28px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--available);
+    background: var(--available-dim);
+    border: 1px solid var(--available);
+    border-radius: 999px;
+    padding: 7px 15px;
+  }
+
+  .not-for-sale {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+  }
+
+  .detail-price {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    color: var(--text-primary);
+    margin: 22px 0 0;
+  }
+
+  .detail-back {
+    display: inline-block;
+    margin-top: 46px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .detail-back:hover {
+    color: var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    .detail {
+      grid-template-columns: 1fr;
+      gap: 34px;
+      padding: 120px 24px var(--space-section-m);
+    }
+
+    .detail-media {
+      position: static;
+    }
+  }
+</style>

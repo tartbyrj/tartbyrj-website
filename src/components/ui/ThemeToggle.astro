@@ -1,0 +1,35 @@
+---
+---
+
+<button
+  id="theme-toggle"
+  type="button"
+  aria-label="Toggle color theme"
+  style={`background: none; border: none; cursor: pointer; color: var(--accent); font-size: 16px; padding: 0; line-height: 1; transition: opacity var(--dur-base) ease;`}
+  onmouseover="this.style.opacity='0.6'"
+  onmouseout="this.style.opacity='1'"
+>
+  <span id="theme-toggle-icon" aria-hidden="true">☽</span>
+</button>
+
+<script is:inline>
+  (function () {
+    const button = document.getElementById('theme-toggle');
+    const icon = document.getElementById('theme-toggle-icon');
+
+    function syncIcon() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      icon.textContent = current === 'dark' ? '☀' : '☽';
+    }
+
+    syncIcon();
+
+    button.addEventListener('click', function () {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      syncIcon();
+    });
+  })();
+</script>
