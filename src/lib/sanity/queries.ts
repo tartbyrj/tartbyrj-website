@@ -1,5 +1,5 @@
 export const FEATURED_ARTWORKS_QUERY = `
-*[_type=="artwork"&&featured==true][0...6]{
+*[_type=="artwork"&&featured==true]|order(_createdAt desc)[0...6]{
   title,slug,image,year,medium,dimensions,altText
 }
 `;

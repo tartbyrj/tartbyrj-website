@@ -72,7 +72,7 @@ const meta = [artwork.year, artwork.medium, artwork.dimensions].filter(Boolean).
         )}
       </div>
 
-      {artwork.available && artwork.price !== undefined && (
+      {artwork.available && artwork.price != null && (
         <p class="detail-price">${artwork.price.toLocaleString('en-US')}</p>
       )}
 

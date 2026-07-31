@@ -1,20 +1,24 @@
 ---
+import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
 import { COLLECTION_BY_SLUG_QUERY } from '../../lib/sanity/queries';
 import { CollectionSchema } from '../../types/collection';
 
 export async function getStaticPaths() {
-  const slugs: { slug: string }[] = await client.fetch(
-    `*[_type == "collection" && defined(slug.current)]{"slug": slug.current}`
-  );
+  const rawSlugs = await client
+    .fetch(`*[_type == "collection" && defined(slug.current)]{"slug": slug.current}`)
+    .catch(() => null);
+
+  const result = z.array(z.object({ slug: z.string() })).safeParse(rawSlugs);
+  const slugs = result.success ? result.data : [];
 
   return slugs.map(({ slug }) => ({ params: { slug } }));
 }
 
 const { slug } = Astro.params;
 
-const raw = await client.fetch(COLLECTION_BY_SLUG_QUERY, { slug });
+const raw = await client.fetch(COLLECTION_BY_SLUG_QUERY, { slug }).catch(() => null);
 const parsed = CollectionSchema.safeParse(raw);
 
 if (!parsed.success) {
@@ -33,15 +37,8 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
 ---
 
 <Layout title={collection.title}>
-  <div class="m-0 bg-black text-white">
-    <a
-      href="/collections"
-      class="fixed top-6 left-6 z-50 text-sm tracking-wide text-white/90 hover:text-white transition-colors [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]"
-    >
-      ← Back to Collections
-    </a>
-
-    <section class="relative h-screen w-full overflow-hidden">
+  <div class="collection-detail">
+    <section class="hero">
       {heroUrl && (
         <img
           src={heroUrl}
@@ -50,9 +47,12 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
           loading="eager"
         />
       )}
-      <div class="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/10 to-transparent p-10">
+
+      <a href="/collections" class="back-link">← Back to Collections</a>
+
+      <div class="hero-overlay">
         <h1 class="text-4xl md:text-6xl font-light tracking-tight">{collection.title}</h1>
-        <p class="mt-2 text-white/80">
+        <p class="hero-meta">
           {[collection.location, collection.year].filter(Boolean).join(' · ')}
         </p>
       </div>
@@ -72,11 +72,11 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
     )}
 
     <section class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="text-2xl md:text-3xl font-light mb-10">Works in this Collection</h2>
+      <h2 class="works-heading text-2xl md:text-3xl font-light mb-10">Works in this Collection</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
         {(collection.artworks ?? []).map((artwork: any) => (
-          <a href={`/works/${artwork.slug.current}`} class="group block">
-            <div class="aspect-square overflow-hidden bg-white/5">
+          <a href={`/works/${artwork.slug.current}`} class="group block work-link">
+            <div class="work-thumb aspect-square overflow-hidden">
               {artwork.image && (
                 <img
                   src={urlFor(artwork.image).width(800).height(800).format('webp').quality(85).url()}
@@ -86,8 +86,8 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
                 />
               )}
             </div>
-            <p class="mt-3 text-sm tracking-wide text-white/90">{artwork.title}</p>
-            {artwork.year && <p class="text-xs text-white/50">{artwork.year}</p>}
+            <p class="work-title mt-3 text-sm tracking-wide">{artwork.title}</p>
+            {artwork.year && <p class="work-year text-xs">{artwork.year}</p>}
           </a>
         ))}
       </div>
@@ -98,6 +98,88 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
 <style>
   :global(html) {
     scroll-behavior: smooth;
+  }
+
+  .collection-detail {
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .hero {
+    position: relative;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  /* Absolute (not fixed) and offset below the nav bar: no z-index contest with
+     the fixed nav, and no overlap with the nav logo it used to sit on top of. */
+  .back-link {
+    position: absolute;
+    top: 92px;
+    left: 24px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: var(--text-primary);
+    /* Sits over an arbitrary photograph — a themed scrim keeps it legible
+       without hardcoding a colour. Mirrors #nav.scrolled. */
+    background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease;
+  }
+
+  .back-link:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px;
+    /* Theme-aware scrim (light scrim + dark text in light theme, and the
+       inverse in dark) — same token the works grid overlay uses. */
+    background: var(--hero-overlay);
+    color: var(--text-primary);
+  }
+
+  .hero-meta {
+    margin-top: 8px;
+    color: var(--text-secondary);
+  }
+
+  .works-heading {
+    color: var(--text-primary);
+  }
+
+  .work-link {
+    text-decoration: none;
+  }
+
+  .work-thumb {
+    background: var(--bg-secondary);
+  }
+
+  .work-title {
+    color: var(--text-primary);
+  }
+
+  .work-year {
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 700px) {
+    .hero-overlay {
+      padding: 24px;
+    }
   }
 
   .story {

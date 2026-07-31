@@ -28,7 +28,16 @@
       const current = document.documentElement.getAttribute('data-theme') || 'light';
       const next = current === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
+
+      // Persistence is best-effort. If storage is blocked the theme still
+      // applies for this page — but syncIcon() must run either way, or the
+      // icon would contradict the theme actually in effect.
+      try {
+        localStorage.setItem('theme', next);
+      } catch (e) {
+        /* storage unavailable — theme applies without persisting */
+      }
+
       syncIcon();
     });
   })();

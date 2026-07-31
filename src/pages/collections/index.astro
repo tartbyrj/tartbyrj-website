@@ -1,17 +1,34 @@
 ---
+import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
 
-const collections = await client.fetch(`
-  *[_type == "collection" && defined(slug.current)] | order(year desc){
-    title,
-    year,
-    location,
-    coverImage,
-    "slug": slug.current,
-    "artworkCount": count(artworks)
-  }
-`);
+// `slug` is projected as a string here (not the {current} object CollectionSchema
+// expects), so this list has its own shape.
+const CollectionCardSchema = z.object({
+  title: z.string(),
+  slug: z.string(),
+  year: z.number().nullish(),
+  location: z.string().nullish(),
+  coverImage: z.any().nullish(),
+  artworkCount: z.number().nullish(),
+});
+
+const raw = await client
+  .fetch(
+    `*[_type == "collection" && defined(slug.current)] | order(year desc){
+      title,
+      year,
+      location,
+      coverImage,
+      "slug": slug.current,
+      "artworkCount": count(artworks)
+    }`
+  )
+  .catch(() => null);
+
+const result = z.array(CollectionCardSchema).safeParse(raw);
+const collections = result.success ? result.data : [];
 ---
 
 <Layout title="Collections">
@@ -19,8 +36,10 @@ const collections = await client.fetch(`
     <h1 class="page-title">Collections</h1>
   </header>
 
+  {collections.length === 0 && <p class="empty">Collections coming soon.</p>}
+
   <section class="collections-grid">
-    {collections.map((collection: any) => (
+    {collections.map((collection) => (
       <a href={`/collections/${collection.slug}`} class="collection-card reveal">
         <div class="collection-card-media">
           {collection.coverImage && (
@@ -34,7 +53,7 @@ const collections = await client.fetch(`
         <h2 class="collection-card-title">{collection.title}</h2>
         <p class="collection-card-meta">
           {[collection.location, collection.year].filter(Boolean).join(' · ')}
-          {collection.artworkCount > 0 && (
+          {collection.artworkCount != null && collection.artworkCount > 0 && (
             <span> · {collection.artworkCount} {collection.artworkCount === 1 ? 'work' : 'works'}</span>
           )}
         </p>
@@ -101,6 +120,13 @@ const collections = await client.fetch(`
     letter-spacing: 0.13em;
     color: var(--text-secondary);
     margin: 5px 0 0;
+  }
+
+  .empty {
+    padding: 80px 52px var(--space-section);
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
   }
 
   @media (max-width: 700px) {

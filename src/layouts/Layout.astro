@@ -35,10 +35,27 @@ const navLinks = [
 <html lang="en">
   <head>
     <script is:inline>
-      const s = localStorage.getItem('theme');
-      const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', s || sys || 'light');
+      (function () {
+        var saved = null;
+        // Throws in storage-blocked contexts (Safari private mode, locked-down
+        // corporate browsers). Must not prevent data-theme from being set.
+        try {
+          saved = localStorage.getItem('theme');
+        } catch (e) {
+          saved = null;
+        }
+        var system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', saved || system || 'light');
+      })();
     </script>
+
+    <noscript>
+      <!-- is:inline — must stay global and unscoped; .reveal elements live in
+           page components, not in this layout's style scope. -->
+      <style is:inline>
+        .reveal { opacity: 1 !important; transform: none !important; }
+      </style>
+    </noscript>
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -336,14 +353,24 @@ const navLinks = [
     gap: 28px;
     opacity: 0;
     pointer-events: none;
+    /* visibility (not just opacity) — removes the 5 links + close button from
+       the tab order while closed. Delayed to the end of the fade so the
+       close animation still plays. */
+    visibility: hidden;
     transform: translateY(12px);
-    transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+    transition: opacity var(--dur-slow) var(--ease-out),
+                transform var(--dur-slow) var(--ease-out),
+                visibility 0s linear var(--dur-slow);
   }
 
   .mobile-menu.open {
     opacity: 1;
     pointer-events: auto;
+    visibility: visible;
     transform: translateY(0);
+    transition: opacity var(--dur-slow) var(--ease-out),
+                transform var(--dur-slow) var(--ease-out),
+                visibility 0s;
   }
 
   .mobile-menu a {

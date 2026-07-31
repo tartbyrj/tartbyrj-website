@@ -8,12 +8,12 @@ export const ArtworkSchema = z.object({
       asset: z.object({ _ref: z.string() }),
       hotspot: z.any().optional(),
     })
-    .optional(),
-  year: z.number().optional(),
-  medium: z.string().optional(),
-  dimensions: z.string().optional(),
-  available: z.boolean().optional(),
-  price: z.number().optional(),
+    .nullish(),
+  year: z.number().nullish(),
+  medium: z.string().nullish(),
+  dimensions: z.string().nullish(),
+  available: z.boolean().nullish(),
+  price: z.number().nullish(),
   // Accepts both shapes this field arrives in: a raw reference ({_ref}) from
   // queries that select `collection` directly, and the dereferenced projection
   // ({title, slug}) from ARTWORK_BY_SLUG_QUERY's `collection->{...}`. GROQ
@@ -25,7 +25,7 @@ export const ArtworkSchema = z.object({
       slug: z.object({ current: z.string() }).optional(),
     })
     .nullish(),
-  featured: z.boolean().optional(),
+  featured: z.boolean().nullish(),
   altText: z.string().nullish(),
 });
 

@@ -65,6 +65,13 @@ export default defineType({
       title: 'Featured',
       type: 'boolean',
     }),
+    defineField({
+      name: 'altText',
+      title: 'Alt Text',
+      type: 'string',
+      description:
+        'Accessibility description of the artwork image (used for screen readers and SEO)',
+    }),
   ],
   orderings: [
     {
