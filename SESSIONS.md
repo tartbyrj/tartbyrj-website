@@ -6,6 +6,40 @@
 
 ---
 
+## Session: 2026-07-31
+
+### Completed
+- Real content seeded in Sanity Studio — one artwork ("Worlds within walls") + one collection ("Worlds Within Walls") published
+- Root cause of blank `/works` page found: `aaltText` typo in `src/types/artwork.ts` + `.optional()` not handling Sanity's `null` returns
+- `src/types/artwork.ts` — fixed `aaltText` → `altText`, changed nullable fields to `.nullish()`
+- `src/types/collection.ts` — `location`, `description` → `.nullish()`
+- GitHub repo pushed: `tartbyrj/tartbyrj-website` on `main` (initial commit `bd4c42a`)
+- Cloudflare Pages deployed: `tartbyrj.pages.dev` — build clean, 8 pages
+- Env vars set in Cloudflare: `PUBLIC_SANITY_PROJECT_ID`, `PUBLIC_SANITY_DATASET`
+- Sanity webhook → Cloudflare deploy hook wired — auto-rebuild on publish confirmed working
+- CORS origins added: `localhost:4321`, `tartbyrj.pages.dev`, `tartbyrj.com`
+- 14-point audit resolved: nullish Zod fields, useCdn false, zod explicit dep, collection fetch safety, altText schema field, featured query ordering, mobile menu tab order, localStorage guards, reveal no-JS fallback, back link z-index, hardcoded colors replaced with tokens, .claude settings removed from repo
+
+### Decisions
+- `useCdn: false` — webhook rebuilds must read fresh Sanity data
+- Collection back link → `absolute` inside hero not `fixed` — no z-index conflict
+- `noscript` style uses `is:inline` — Astro scopes regular styles to component hash
+- `visibility: hidden` on mobile menu — removes hidden links from tab order natively
+
+### Bugs
+- Sanity Studio local Vite chunk error (`pane-CoSiSpvR`) — deferred, non-blocking
+- `package.json` name empty — cosmetic, not fixed
+- `astro.config.mjs` hardcodes Sanity project ID — inconsistent with env var pattern, not fixed
+
+### Next Session Candidates
+- Connect `tartbyrj.com` → Cloudflare Pages DNS (Phase 4)
+- Upload all real painting photos + storyPages for full collections
+- Fix `astro.config.mjs` hardcoded Sanity vars → read from env
+- Wire real Instagram URL on contact page
+- Verify `/studio` on `tartbyrj.pages.dev` works post-CORS setup
+
+---
+
 ## 2026-07-30 — Session 1: Foundation, Sanity, Layout, all pages built
 
 ### Summary
