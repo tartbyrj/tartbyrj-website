@@ -1,18 +1,16 @@
 ---
-import { z } from 'zod';
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
+import { parseList } from '../lib/sanity/parse';
 import { FEATURED_ARTWORKS_QUERY, ALL_COLLECTIONS_QUERY } from '../lib/sanity/queries';
 import { ArtworkSchema } from '../types/artwork';
 import { CollectionSchema } from '../types/collection';
 
 const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
-const featuredResult = z.array(ArtworkSchema).safeParse(featuredRaw);
-const featuredArtworks = featuredResult.success ? featuredResult.data : [];
+const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORKS_QUERY');
 
 const collectionsRaw = await client.fetch(ALL_COLLECTIONS_QUERY).catch(() => null);
-const collectionsResult = z.array(CollectionSchema).safeParse(collectionsRaw);
-const collections = collectionsResult.success ? collectionsResult.data : [];
+const collections = parseList(CollectionSchema, collectionsRaw, 'ALL_COLLECTIONS_QUERY');
 
 const heroImage = featuredArtworks[0]?.image;
 const heroUrl = heroImage ? urlFor(heroImage).width(1920).format('webp').url() : undefined;

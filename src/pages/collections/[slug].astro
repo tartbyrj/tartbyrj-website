@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
+import { parseList } from '../../lib/sanity/parse';
 import { COLLECTION_BY_SLUG_QUERY } from '../../lib/sanity/queries';
 import { CollectionSchema } from '../../types/collection';
 
@@ -10,8 +11,7 @@ export async function getStaticPaths() {
     .fetch(`*[_type == "collection" && defined(slug.current)]{"slug": slug.current}`)
     .catch(() => null);
 
-  const result = z.array(z.object({ slug: z.string() })).safeParse(rawSlugs);
-  const slugs = result.success ? result.data : [];
+  const slugs = parseList(z.object({ slug: z.string() }), rawSlugs, 'collection slugs');
 
   return slugs.map(({ slug }) => ({ params: { slug } }));
 }

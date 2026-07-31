@@ -1,13 +1,12 @@
 ---
-import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
+import { parseList } from '../../lib/sanity/parse';
 import { ALL_ARTWORKS_QUERY } from '../../lib/sanity/queries';
 import { ArtworkSchema } from '../../types/artwork';
 
 const raw = await client.fetch(ALL_ARTWORKS_QUERY).catch(() => null);
-const result = z.array(ArtworkSchema).safeParse(raw);
-const artworks = result.success ? result.data : [];
+const artworks = parseList(ArtworkSchema, raw, 'ALL_ARTWORKS_QUERY');
 
 const filters = ['All', 'Acrylic', 'Oil', 'Watercolour', 'Mixed'];
 ---

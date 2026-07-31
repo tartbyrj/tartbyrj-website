@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
+import { parseList } from '../../lib/sanity/parse';
 
 // `slug` is projected as a string here (not the {current} object CollectionSchema
 // expects), so this list has its own shape.
@@ -27,8 +28,7 @@ const raw = await client
   )
   .catch(() => null);
 
-const result = z.array(CollectionCardSchema).safeParse(raw);
-const collections = result.success ? result.data : [];
+const collections = parseList(CollectionCardSchema, raw, 'collections list');
 ---
 
 <Layout title="Collections">
