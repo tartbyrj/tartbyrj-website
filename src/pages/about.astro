@@ -1,27 +1,32 @@
 ---
+import { Image } from 'astro:assets';
 import { z } from 'zod';
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { ABOUT_QUERY } from '../lib/sanity/queries';
 
 const AboutSchema = z.object({
-  biography: z.unknown().optional(),
-  statement: z.string().optional(),
-  portrait: z.object({ asset: z.object({ _ref: z.string() }) }).optional(),
+  biography: z.unknown().nullish(),
+  statement: z.string().nullish(),
+  portrait: z.object({ asset: z.object({ _ref: z.string() }) }).nullish(),
 });
 
 const raw = await client.fetch(ABOUT_QUERY).catch(() => null);
 const result = AboutSchema.safeParse(raw);
 const about = result.success ? result.data : undefined;
 
-const FALLBACK_BIO =
-  'Through murals, drawing and public art, Rupjyoti Baruah explores the stories carried by people, places and living beings.';
+// The artist's own words, from the Worlds Within Walls archive. Sanity
+// overrides these once an aboutPage singleton is published.
+const FALLBACK_BIO = [
+  'Through murals, drawing and public art, I explore the stories carried by people, places and living beings.',
+  'My work is rooted in the belief that art can slow us down, encourage closer observation and create meaningful human connection.',
+];
 const FALLBACK_STATEMENT = 'Observation. Memory. Connection.';
 
 // `biography` is Portable Text. Flatten each block's spans into a paragraph;
-// fall back to the default copy when Sanity has nothing to render.
+// fall back to the archive copy when Sanity has nothing to render.
 function toParagraphs(value: unknown): string[] {
-  if (!Array.isArray(value)) return [FALLBACK_BIO];
+  if (!Array.isArray(value)) return FALLBACK_BIO;
 
   const paragraphs = value
     .map((block) => {
@@ -38,69 +43,351 @@ function toParagraphs(value: unknown): string[] {
     })
     .filter((text) => text.trim().length > 0);
 
-  return paragraphs.length > 0 ? paragraphs : [FALLBACK_BIO];
+  return paragraphs.length > 0 ? paragraphs : FALLBACK_BIO;
 }
 
 const paragraphs = toParagraphs(about?.biography);
-const statement = about?.statement ?? FALLBACK_STATEMENT;
-const portraitUrl = about?.portrait
+
+// The statement is read as a litany — one word per line. Splitting on the
+// sentence break keeps that working for whatever the artist writes later.
+const statementWords = (about?.statement ?? FALLBACK_STATEMENT)
+  .split('.')
+  .map((word) => word.trim())
+  .filter(Boolean);
+
+// Portrait sources, in order:
+//   1. the Sanity `aboutPage` singleton, sized through urlFor()
+//   2. a local file dropped into src/assets/artist/ as `me.<ext>` — see the
+//      README there. Globbed rather than imported directly so the file is
+//      optional; Astro optimises it on build.
+const localPortraits = import.meta.glob<{ default: ImageMetadata }>(
+  '../assets/artist/me.{jpg,jpeg,png,webp}',
+  { eager: true }
+);
+const localPortrait = Object.values(localPortraits)[0]?.default;
+
+const sanityPortraitUrl = about?.portrait
   ? urlFor(about.portrait).width(900).format('webp').quality(85).url()
   : undefined;
+
+const hasPortrait = Boolean(sanityPortraitUrl || localPortrait);
+
+// Nothing to show yet: mark where the photo lands while developing, but never
+// ship a "drop your photo here" frame to visitors.
+const showPortraitPlaceholder = !hasPortrait && import.meta.env.DEV;
 
 const availableFor = ['Private commissions', 'Painting workshops', 'Studio visits'];
 ---
 
-<Layout title="About">
-  <div class="about">
-    <div class="about-media">
-      {portraitUrl ? (
-        <img src={portraitUrl} alt="Rupjyoti Baruah" loading="eager" />
-      ) : (
-        <div class="about-media-fallback"></div>
-      )}
-      <p class="about-caption">
-        Rupjyoti Baruah — Artist · Muralist · Storyteller · Dubai · Assam, India
-      </p>
-    </div>
+<Layout
+  title="About"
+  description="Rupjyoti Baruah — artist, muralist and storyteller working between Dubai and Assam, India."
+>
+  <article class:list={['about', !hasPortrait && !showPortraitPlaceholder && 'about-solo']}>
+    {sanityPortraitUrl ? (
+      <figure class="portrait">
+        <img src={sanityPortraitUrl} alt="Rupjyoti Baruah in the studio" loading="eager" />
+      </figure>
+    ) : localPortrait ? (
+      <figure class="portrait">
+        <Image
+          src={localPortrait}
+          alt="Rupjyoti Baruah in the studio"
+          widths={[600, 900, 1200]}
+          sizes="(max-width: 900px) 100vw, 45vw"
+          format="webp"
+          quality={85}
+          loading="eager"
+        />
+      </figure>
+    ) : null}
 
-    <div class="about-body">
-      <p class="label">The Artist</p>
+    {showPortraitPlaceholder && (
+      <div class="portrait portrait-slot">
+        <p class="portrait-slot-title">Artist portrait</p>
+        <p class="portrait-slot-hint">
+          Drop <code>me.jpg</code> or <code>me.png</code> into
+          <br />
+          <code>src/assets/artist/</code>
+        </p>
+        <p class="portrait-slot-note">Dev only — hidden in the built site</p>
+      </div>
+    )}
 
-      <h1 class="about-heading">
-        <span>Rupjyoti</span> <span class="about-heading-accent">Baruah</span>
+    <div class="statement">
+      <header class="archive-head reveal">
+        <a class="archive-collection" href="/collections/worlds-within-walls">
+          Worlds Within Walls
+        </a>
+        <span class="archive-divider" aria-hidden="true"></span>
+        <span class="archive-kind">Archive Collection</span>
+      </header>
+
+      <h1 class="title reveal">
+        <span class="title-lead">The World</span>
+        <span class="title-sub">Behind the Work</span>
       </h1>
 
-      {paragraphs.map((text) => <p class="about-para">{text}</p>)}
+      <div class="title-rule reveal" aria-hidden="true"></div>
 
-      <blockquote class="about-quote">{statement}</blockquote>
+      <p class="litany">
+        {statementWords.map((word, i) => (
+          <span class="litany-word reveal" style={`transition-delay: ${i * 220}ms`}>
+            {word}.
+          </span>
+        ))}
+      </p>
 
-      <section class="about-block">
-        <p class="label">Available for</p>
-        <ul class="about-list">
+      <div class="prose reveal">
+        {paragraphs.map((text) => (
+          <p>{text}</p>
+        ))}
+      </div>
+
+      <footer class="colophon reveal">
+        <p class="signature">Rupjyoti Baruah</p>
+        <p class="role">Artist | Muralist | Storyteller</p>
+        <span class="colophon-rule" aria-hidden="true"></span>
+        <p class="location">
+          Dubai • Assam<br />India
+        </p>
+      </footer>
+
+      <section class="available reveal">
+        <h2 class="label">Available for</h2>
+        <ul>
           {availableFor.map((item) => (
-            <li>— {item}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section class="about-block">
-        <p class="label">Exhibitions</p>
-        <ul class="exhibitions">
-          {[0, 1, 2].map(() => (
-            <li class="exhibition">
-              <span class="exhibition-year">—</span>
-              <span class="exhibition-name">—</span>
-              <span class="exhibition-venue">—</span>
-            </li>
+            <li>{item}</li>
           ))}
         </ul>
       </section>
     </div>
-  </div>
+  </article>
 </Layout>
 
 <style>
+  .about {
+    display: grid;
+    grid-template-columns: 0.85fr 1fr;
+    gap: 72px;
+    align-items: start;
+    padding: 150px 52px var(--space-section);
+    background: var(--bg-primary);
+  }
+
+  /* ── Portrait ─────────────────────────────────────────── */
+
+  .portrait {
+    position: sticky;
+    top: 110px;
+    margin: 0;
+  }
+
+  .portrait :global(img) {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+  }
+
+  /* No portrait published yet — a blank placeholder box would just be a hole,
+     so the statement carries the page on its own instead. */
+  .about-solo {
+    grid-template-columns: minmax(0, 620px);
+    justify-content: center;
+  }
+
+  /* Dev-only slot marking where the photo lands. */
+  .portrait-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    aspect-ratio: 4 / 5;
+    padding: 24px;
+    text-align: center;
+    border: 1px dashed var(--border-strong);
+    background: var(--bg-secondary);
+  }
+
+  .portrait-slot-title {
+    font-family: var(--font-serif);
+    font-size: 21px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .portrait-slot-hint {
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .portrait-slot code {
+    font-family: var(--font-sans);
+    letter-spacing: 0.03em;
+    color: var(--accent);
+  }
+
+  .portrait-slot-note {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    margin: 6px 0 0;
+  }
+
+  /* ── Archive header ───────────────────────────────────── */
+
+  /* One measure for the whole column, so the rules end where the prose does
+     instead of running past it. */
+  .statement {
+    max-width: 620px;
+  }
+
+  .archive-head {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+
+  .archive-collection {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  .archive-collection:hover {
+    color: var(--accent);
+  }
+
+  .archive-divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border-strong);
+  }
+
+  .archive-kind {
+    color: var(--text-muted);
+  }
+
+  /* ── Display title ────────────────────────────────────── */
+
+  .title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin: 34px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .title-lead {
+    font-size: clamp(30px, 5.4vw, 60px);
+    letter-spacing: 0.17em;
+    line-height: 1;
+  }
+
+  .title-sub {
+    font-size: clamp(19px, 3.2vw, 35px);
+    letter-spacing: 0.21em;
+    line-height: 1;
+    color: var(--text-secondary);
+  }
+
+  .title-rule {
+    height: 1px;
+    background: var(--border-strong);
+    margin: 30px 0 40px;
+  }
+
+  /* ── Litany — the signature moment ────────────────────── */
+
+  .litany {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 0 46px;
+  }
+
+  .litany-word {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(22px, 2.7vw, 31px);
+    line-height: 1.45;
+    color: var(--accent);
+  }
+
+  /* ── Body copy ────────────────────────────────────────── */
+
+  .prose p {
+    color: var(--text-secondary);
+    line-height: 1.9;
+    margin: 0 0 22px;
+  }
+
+  .prose p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ── Colophon ─────────────────────────────────────────── */
+
+  .colophon {
+    margin-top: 52px;
+  }
+
+  .signature {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 27px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .role,
+  .location {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin: 0;
+  }
+
+  .role {
+    color: var(--text-secondary);
+    margin-top: 10px;
+  }
+
+  .location {
+    color: var(--text-muted);
+    line-height: 1.9;
+  }
+
+  .colophon-rule {
+    display: block;
+    width: 44px;
+    height: 1px;
+    background: var(--accent-dim);
+    margin: 26px 0;
+  }
+
+  /* ── Available for ────────────────────────────────────── */
+
+  .available {
+    margin-top: 56px;
+    padding-top: 26px;
+    border-top: 1px solid var(--border);
+  }
+
   .label {
+    font-family: var(--font-sans);
+    font-weight: 400;
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -108,119 +395,45 @@ const availableFor = ['Private commissions', 'Painting workshops', 'Studio visit
     margin: 0;
   }
 
-  .about {
-    display: grid;
-    grid-template-columns: 1fr 1.1fr;
-    gap: 60px;
-    padding: 140px 52px var(--space-section);
-    background: var(--bg-primary);
-    align-items: start;
-  }
-
-  .about-media {
-    position: sticky;
-    top: 100px;
-  }
-
-  .about-media img,
-  .about-media-fallback {
-    width: 100%;
-    aspect-ratio: 4 / 5;
-    object-fit: cover;
-    display: block;
-  }
-
-  .about-media-fallback {
-    background: var(--bg-secondary);
-  }
-
-  .about-caption {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
+  .available ul {
+    list-style: none;
+    padding: 0;
     margin: 14px 0 0;
-    line-height: 1.6;
   }
 
-  .about-heading {
-    font-family: var(--font-serif);
-    font-weight: 300;
-    font-size: clamp(34px, 5.5vw, 64px);
-    line-height: 1.02;
-    color: var(--text-primary);
-    margin: 14px 0 30px;
-  }
-
-  .about-heading-accent {
-    font-style: italic;
-    color: var(--accent);
-  }
-
-  .about-para {
+  .available li {
     color: var(--text-secondary);
-    line-height: 1.8;
-    margin: 0 0 18px;
-    max-width: 58ch;
+    line-height: 2.1;
   }
 
-  .about-quote {
-    border-left: 1px solid var(--accent-dim);
-    padding-left: 22px;
-    margin: 34px 0;
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 18px;
-    color: var(--text-primary);
-  }
-
-  .about-block {
-    margin-top: 44px;
-  }
-
-  .about-list {
-    list-style: none;
-    padding: 0;
-    margin: 16px 0 0;
-  }
-
-  .about-list li {
-    color: var(--text-secondary);
-    line-height: 2;
-  }
-
-  .exhibitions {
-    list-style: none;
-    padding: 0;
-    margin: 16px 0 0;
-  }
-
-  .exhibition {
-    display: grid;
-    grid-template-columns: 70px 1fr 1fr;
-    gap: 16px;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
+  .available li::before {
+    content: '—';
     color: var(--text-muted);
+    margin-right: 12px;
+  }
+
+  /* The staggered litany is the one deliberate motion on this page —
+     honour a reduced-motion preference by showing it at once. */
+  @media (prefers-reduced-motion: reduce) {
+    .litany-word {
+      transition: none !important;
+      transition-delay: 0s !important;
+    }
   }
 
   @media (max-width: 900px) {
     .about {
       grid-template-columns: 1fr;
-      gap: 36px;
+      gap: 42px;
       padding: 120px 24px var(--space-section-m);
     }
 
-    .about-media {
+    .portrait {
       position: static;
     }
 
-    .exhibition {
-      grid-template-columns: 56px 1fr;
-    }
-
-    .exhibition-venue {
-      grid-column: 2;
+    .title {
+      margin-top: 28px;
     }
   }
 </style>

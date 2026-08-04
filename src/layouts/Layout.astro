@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
 import ThemeToggle from '../components/ui/ThemeToggle.astro';
 
 export interface Props {
@@ -30,6 +32,15 @@ const navLinks = [
   { label: 'About', href: '/about' },
   { label: 'Contact', href: '/contact' },
 ];
+
+// Brand lockup, dropped into src/assets/ as `tart-logo.<ext>`. Globbed rather
+// than imported directly so a missing file falls back to the type wordmark
+// instead of failing the build; Astro optimises it on build.
+const logoFiles = import.meta.glob<{ default: ImageMetadata }>(
+  '../assets/tart-logo.{png,jpg,jpeg,webp}',
+  { eager: true }
+);
+const logo = Object.values(logoFiles)[0]?.default;
 ---
 
 <html lang="en">
@@ -78,7 +89,22 @@ const navLinks = [
     <div class="cursor-ring" id="cursor-ring"></div>
 
     <nav id="nav">
-      <a href="/" class="nav-logo">T.Art by RJ</a>
+      <!-- loading="eager": the logo is above the fold on every page, so Astro's
+           lazy default would flash a gap in the nav on first paint. -->
+      <a href="/" class="nav-logo" aria-label="T.Art by RJ — home">
+        {logo ? (
+          <Image
+            class="nav-logo-img"
+            src={logo}
+            alt="T.Art by RJ"
+            width={120}
+            densities={[1, 2]}
+            loading="eager"
+          />
+        ) : (
+          <span class="nav-logo-text">T.Art by RJ</span>
+        )}
+      </a>
       <div class="nav-right">
         <div class="nav-links">
           {navLinks.map((link) => (
@@ -106,7 +132,19 @@ const navLinks = [
     </main>
 
     <footer>
-      <div class="footer-logo">T.Art by RJ</div>
+      <div class="footer-logo">
+        {logo ? (
+          <Image
+            class="footer-logo-img"
+            src={logo}
+            alt="T.Art by RJ — Where Taste & Art Blends"
+            width={320}
+            densities={[1, 2]}
+          />
+        ) : (
+          <span class="footer-logo-text">T.Art by RJ</span>
+        )}
+      </div>
       <div class="footer-links">
         <a href="/works">Works</a>
         <a href="/collections">Collections</a>
@@ -269,7 +307,13 @@ const navLinks = [
     }
   }
 
+  /* --logo-h drives nav height, and nav height is a budget, not a free choice:
+     every other page hardcodes a top offset to clear this fixed bar (140px on
+     /works and /collections, 150px /about, 160px /contact, 120px mobile). At
+     64 + 2×18 the bar is 100px, leaving 40-60px of breathing room. Push the
+     logo much past this and page headings start tucking under the nav. */
   #nav {
+    --logo-h: 64px;
     position: fixed;
     top: 0;
     left: 0;
@@ -278,7 +322,8 @@ const navLinks = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 22px 52px;
+    gap: 24px;
+    padding: 18px 52px;
     background: transparent;
     transition: background var(--dur-base) ease, border-color var(--dur-base) ease;
   }
@@ -289,13 +334,32 @@ const navLinks = [
     border-bottom: 1px solid var(--border);
   }
 
+  /* flex, not inline — kills the baseline gap under the logo image so the
+     lockup sits optically centred against the nav links. */
   .nav-logo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    text-decoration: none;
+  }
+
+  .nav-logo-text {
     font-family: var(--font-serif);
     font-size: 17px;
     font-weight: 400;
     letter-spacing: 0.05em;
     color: var(--text-primary);
-    text-decoration: none;
+  }
+
+  /* Height-driven: the lockup is wide and short, so height is what has to stay
+     consistent with the nav links. Width follows the source aspect ratio, and
+     min-width: 0 on the flex parent lets it shrink rather than shove the links
+     off-screen at awkward tablet widths. */
+  .nav-logo-img {
+    height: var(--logo-h);
+    width: auto;
+    max-width: 100%;
+    display: block;
   }
 
   .nav-right {
@@ -393,6 +457,7 @@ const navLinks = [
 
   @media (max-width: 900px) {
     #nav {
+      --logo-h: 44px;
       padding: 18px 24px;
     }
 
@@ -405,7 +470,13 @@ const navLinks = [
     }
   }
 
+  /* The footer is where the lockup is finally allowed to be legible. The nav
+     caps out around 64px because nav height is a shared budget; nothing here
+     competes for vertical space, so the tagline gets enough height to resolve.
+     Tagline cap height is roughly 3.8% of the file's height — 180px puts it
+     near 7px, which is the point it stops being texture. Tune --footer-logo-h. */
   footer {
+    --footer-logo-h: 180px;
     padding: 40px 52px;
     border-top: 1px solid var(--border);
     background: var(--bg-primary);
@@ -417,9 +488,32 @@ const navLinks = [
   }
 
   .footer-logo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .footer-logo-text {
     font-family: var(--font-serif);
     font-size: 18px;
     color: var(--text-primary);
+  }
+
+  .footer-logo-img {
+    height: var(--footer-logo-h);
+    width: auto;
+    max-width: 100%;
+    display: block;
+  }
+
+  /* Declared after the base rule, not folded into the nav's media block above —
+     that block sits earlier in the file, and an equal-specificity `footer` rule
+     later in source order would override it. */
+  @media (max-width: 900px) {
+    footer {
+      --footer-logo-h: 120px;
+      padding: 32px 24px;
+    }
   }
 
   .footer-links {

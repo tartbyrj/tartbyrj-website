@@ -22,25 +22,77 @@ const featuredCollectionUrl = featuredCollection?.coverImage
 ---
 
 <Layout title="Home">
-  <section class="hero">
-    {heroUrl ? (
-      <img class="hero-media" src={heroUrl} alt={featuredArtworks[0]?.altText ?? featuredArtworks[0]?.title ?? ''} loading="eager" />
-    ) : (
-      <div class="hero-media hero-media-fallback"></div>
-    )}
-    <div class="hero-overlay"></div>
+  <section class="hero-track" id="hero-track">
+    <div class="hero">
+      <div class="hero-frame">
+        {heroUrl ? (
+          <img
+            class="hero-media"
+            src={heroUrl}
+            alt={featuredArtworks[0]?.altText ?? featuredArtworks[0]?.title ?? ''}
+            loading="eager"
+          />
+        ) : (
+          <div class="hero-media hero-media-fallback"></div>
+        )}
+        <div class="hero-overlay"></div>
+      </div>
 
-    <div class="hero-content">
-      <p class="hero-eyebrow">T.Art by RJ · Murals · Paintings · Drawings</p>
-      <h1 class="hero-name">
-        <span>Rupjyoti</span> <span class="hero-name-accent">Baruah</span>
-      </h1>
-      <p class="hero-subtitle">Material Memory · Mark Making</p>
+      <div class="hero-content">
+        <p class="hero-eyebrow">T.Art by RJ · Murals · Paintings · Drawings</p>
+        <h1 class="hero-name">
+          <span>Rupjyoti</span> <span class="hero-name-accent">Baruah</span>
+        </h1>
+        <p class="hero-subtitle">Material Memory · Mark Making</p>
+      </div>
+
+      {featuredArtworks[0] && (
+        <p class="hero-plate">
+          {[featuredArtworks[0].title, featuredArtworks[0].medium, featuredArtworks[0].year]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
+
+      <div class="hero-scroll">
+        <span class="hero-scroll-line"></span>
+        <span class="hero-scroll-text">Scroll</span>
+      </div>
     </div>
+  </section>
 
-    <div class="hero-scroll">
-      <span class="hero-scroll-line"></span>
-      <span class="hero-scroll-text">Scroll</span>
+  <section class="collection-section">
+    <div class="collection-inner">
+      <div class="collection-text reveal">
+        <p class="label">Featured Collection</p>
+        {featuredCollection ? (
+          <>
+            <h2 class="collection-title">{featuredCollection.title}</h2>
+            {featuredCollection.description && (
+              <p class="collection-desc">{featuredCollection.description}</p>
+            )}
+            <a class="collection-link" href={`/collections/${featuredCollection.slug.current}`}>
+              View collection →
+            </a>
+          </>
+        ) : (
+          <>
+            <h2 class="collection-title">Collections in progress</h2>
+            <p class="collection-desc">
+              Series and bodies of work will appear here as they are added.
+            </p>
+            <a class="collection-link" href="/collections">Browse collections →</a>
+          </>
+        )}
+      </div>
+
+      <div class="collection-media reveal">
+        {featuredCollectionUrl ? (
+          <img src={featuredCollectionUrl} alt={featuredCollection?.title ?? ''} loading="lazy" />
+        ) : (
+          <div class="collection-media-fallback"></div>
+        )}
+      </div>
     </div>
   </section>
 
@@ -82,41 +134,6 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     )}
   </section>
 
-  <section class="collection-section">
-    <div class="collection-inner">
-      <div class="collection-text reveal">
-        <p class="label">Featured Collection</p>
-        {featuredCollection ? (
-          <>
-            <h2 class="collection-title">{featuredCollection.title}</h2>
-            {featuredCollection.description && (
-              <p class="collection-desc">{featuredCollection.description}</p>
-            )}
-            <a class="collection-link" href={`/collections/${featuredCollection.slug.current}`}>
-              View collection →
-            </a>
-          </>
-        ) : (
-          <>
-            <h2 class="collection-title">Collections in progress</h2>
-            <p class="collection-desc">
-              Series and bodies of work will appear here as they are added.
-            </p>
-            <a class="collection-link" href="/collections">Browse collections →</a>
-          </>
-        )}
-      </div>
-
-      <div class="collection-media reveal">
-        {featuredCollectionUrl ? (
-          <img src={featuredCollectionUrl} alt={featuredCollection?.title ?? ''} loading="lazy" />
-        ) : (
-          <div class="collection-media-fallback"></div>
-        )}
-      </div>
-    </div>
-  </section>
-
   <section class="about-teaser">
     <p class="label about-label">T.Art by RJ</p>
     <h2 class="about-heading">Artist · Muralist · Storyteller</h2>
@@ -128,6 +145,46 @@ const featuredCollectionUrl = featuredCollection?.coverImage
   </section>
 </Layout>
 
+<script is:inline>
+  (function () {
+    var track = document.getElementById('hero-track');
+    if (!track) return;
+
+    // Reduced motion keeps the static hero: --p stays at its default of 1 and
+    // the track keeps its plain 100vh height.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    track.classList.add('is-animated');
+
+    var ticking = false;
+
+    function update() {
+      ticking = false;
+      var distance = track.offsetHeight - window.innerHeight;
+      if (distance <= 0) {
+        track.style.setProperty('--p', '1');
+        return;
+      }
+      var progress = -track.getBoundingClientRect().top / distance;
+      track.style.setProperty('--p', Math.min(Math.max(progress, 0), 1).toFixed(4));
+    }
+
+    function onScroll() {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    }
+
+    // passive: true — this reads scroll position, it never intercepts or
+    // blocks it. Wheel, trackpad, touch, keyboard, scrollbar and in-page
+    // anchors all behave exactly as they normally would.
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    update();
+  })();
+</script>
+
 <style>
   .label {
     font-size: 10px;
@@ -138,11 +195,56 @@ const featuredCollectionUrl = featuredCollection?.coverImage
   }
 
   /* ─── HERO ─── */
+  /* ── Scroll-expanding hero ──────────────────────────────
+     Everything reads from --p (0 → 1), which the inline script writes from
+     real scroll position. It defaults to 1 — the finished, full-bleed state —
+     so with no JS, or with reduced motion, the hero renders as a normal
+     static hero and nothing is hidden. The script opts in by adding
+     .is-animated, which is also what gives the track its scroll length. */
+  .hero-track {
+    --p: 1;
+    --plate-w: 320px;
+    --plate-h: 430px;
+    position: relative;
+    height: 100vh;
+  }
+
+  .hero-track.is-animated {
+    height: 260vh;
+  }
+
   .hero {
     position: relative;
     height: 100vh;
     width: 100%;
     overflow: hidden;
+  }
+
+  .hero-track.is-animated .hero {
+    position: sticky;
+    top: 0;
+  }
+
+  /* The plate: a small framed canvas that opens to full bleed. */
+  .hero-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(var(--plate-w) + var(--p) * (100vw - var(--plate-w)));
+    height: calc(var(--plate-h) + var(--p) * (100vh - var(--plate-h)));
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+    border: 1px solid transparent;
+    box-shadow: 0 40px 90px
+      color-mix(in srgb, var(--text-primary) calc((1 - var(--p)) * 20%), transparent);
+  }
+
+  .hero-track.is-animated .hero-frame {
+    border-color: color-mix(
+      in srgb,
+      var(--border-strong) calc((1 - var(--p)) * 100%),
+      transparent
+    );
   }
 
   .hero-media {
@@ -161,6 +263,7 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     position: absolute;
     inset: 0;
     background: var(--hero-overlay);
+    opacity: var(--p);
   }
 
   .hero-content {
@@ -169,6 +272,23 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     bottom: 0;
     padding: 60px 52px;
     max-width: 900px;
+  }
+
+  /* Wall label for the featured work — arrives once the plate is fully open,
+     taking the corner the scroll prompt has just vacated. */
+  .hero-plate {
+    position: absolute;
+    right: 52px;
+    bottom: 60px;
+    max-width: 340px;
+    text-align: right;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    line-height: 2;
+    color: var(--text-secondary);
+    margin: 0;
+    opacity: calc((var(--p) - 0.72) / 0.28);
   }
 
   .hero-eyebrow {
@@ -213,6 +333,25 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     animation: fade-up 0.9s var(--ease-out) 0.6s both;
   }
 
+  /* While the plate opens, the load-in animations hand over to --p. Out-of-range
+     opacity values clamp to 0/1, so each element gets its own window: the name
+     settles in over the back half, the prompt retires once you've taken it. */
+  .hero-track.is-animated .hero-eyebrow,
+  .hero-track.is-animated .hero-name,
+  .hero-track.is-animated .hero-subtitle,
+  .hero-track.is-animated .hero-scroll {
+    animation: none;
+  }
+
+  .hero-track.is-animated .hero-content {
+    opacity: calc((var(--p) - 0.5) / 0.35);
+    transform: translateY(calc((1 - var(--p)) * 26px));
+  }
+
+  .hero-track.is-animated .hero-scroll {
+    opacity: calc(1 - var(--p) / 0.45);
+  }
+
   .hero-scroll-line {
     display: block;
     width: 46px;
@@ -236,6 +375,46 @@ const featuredCollectionUrl = featuredCollection?.coverImage
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* ─── FEATURED COLLECTION ─── */
+  .collection-section {
+    padding: var(--space-section) 52px;
+    background: var(--bg-secondary);
+  }
+
+  .collection-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+
+  .collection-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 46px);
+    color: var(--text-primary);
+    margin: 14px 0 0;
+  }
+
+  .collection-desc {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 18px 0 26px;
+    max-width: 46ch;
+  }
+
+  .collection-media img,
+  .collection-media-fallback {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    display: block;
+  }
+
+  .collection-media-fallback {
+    background: var(--bg-elevated);
   }
 
   /* ─── SELECTED WORKS ─── */
@@ -346,46 +525,6 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     aspect-ratio: 16 / 10;
   }
 
-  /* ─── FEATURED COLLECTION ─── */
-  .collection-section {
-    padding: var(--space-section) 52px;
-    background: var(--bg-secondary);
-  }
-
-  .collection-inner {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 56px;
-    align-items: center;
-  }
-
-  .collection-title {
-    font-family: var(--font-serif);
-    font-weight: 300;
-    font-size: clamp(28px, 4vw, 46px);
-    color: var(--text-primary);
-    margin: 14px 0 0;
-  }
-
-  .collection-desc {
-    color: var(--text-secondary);
-    line-height: 1.7;
-    margin: 18px 0 26px;
-    max-width: 46ch;
-  }
-
-  .collection-media img,
-  .collection-media-fallback {
-    width: 100%;
-    aspect-ratio: 4 / 5;
-    object-fit: cover;
-    display: block;
-  }
-
-  .collection-media-fallback {
-    background: var(--bg-elevated);
-  }
-
   /* ─── ABOUT TEASER ─── */
   .about-teaser {
     padding: var(--space-section) 52px;
@@ -419,8 +558,23 @@ const featuredCollectionUrl = featuredCollection?.coverImage
       padding: var(--space-section-m) 24px;
     }
 
+    .hero-track {
+      --plate-w: 210px;
+      --plate-h: 280px;
+    }
+
+    /* Less scroll distance on a phone — a 260vh track is a long way to thumb. */
+    .hero-track.is-animated {
+      height: 200vh;
+    }
+
     .hero-content {
       padding: 40px 24px;
+    }
+
+    /* Bottom-right would land on the name on a phone; the name matters more. */
+    .hero-plate {
+      display: none;
     }
 
     .hero-scroll {
