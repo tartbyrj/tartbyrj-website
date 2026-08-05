@@ -2,23 +2,50 @@
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { parseList } from '../lib/sanity/parse';
-import { FEATURED_ARTWORKS_QUERY, ALL_COLLECTIONS_QUERY } from '../lib/sanity/queries';
+import { FEATURED_ARTWORKS_QUERY, COLLECTIONS_INDEX_QUERY } from '../lib/sanity/queries';
 import { ArtworkSchema } from '../types/artwork';
-import { CollectionSchema } from '../types/collection';
+import { CollectionSchema, type Collection } from '../types/collection';
 
 const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
 const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORKS_QUERY');
 
-const collectionsRaw = await client.fetch(ALL_COLLECTIONS_QUERY).catch(() => null);
-const collections = parseList(CollectionSchema, collectionsRaw, 'ALL_COLLECTIONS_QUERY');
+const collectionsRaw = await client.fetch(COLLECTIONS_INDEX_QUERY).catch(() => null);
+const collections = parseList(CollectionSchema, collectionsRaw, 'COLLECTIONS_INDEX_QUERY');
 
 const heroImage = featuredArtworks[0]?.image;
 const heroUrl = heroImage ? urlFor(heroImage).width(1920).format('webp').url() : undefined;
 
-const featuredCollection = collections[0];
-const featuredCollectionUrl = featuredCollection?.coverImage
-  ? urlFor(featuredCollection.coverImage).width(1000).format('webp').quality(85).url()
-  : undefined;
+// Each collection gets exactly one <img>; the browser picks the width from
+// srcset rather than the markup shipping a copy per breakpoint.
+const COVER_WIDTHS = [480, 800, 1200];
+const COVER_SIZES = '(min-width: 1024px) 46vw, (min-width: 640px) 33vw, 100vw';
+
+function coverSrcSet(cover: NonNullable<Collection['coverImage']>): string {
+  return COVER_WIDTHS.map(
+    (w) => `${urlFor(cover).width(w).format('webp').quality(82).url()} ${w}w`
+  ).join(', ');
+}
+
+// An image and its row sit in different columns on desktop and interleave below
+// 1024px, where they are no longer siblings in the layout tree. Each pair
+// therefore carries its own placement values: --gr is the shared grid row on
+// tablet, --oi/--or are the flex orders that stack them on mobile.
+const rows = collections.map((collection, i) => {
+  // location is .nullish() and artworkCount .optional() — build the line from
+  // what exists so a missing field never leaves a dangling separator.
+  const meta: string[] = [];
+  if (collection.year != null) meta.push(String(collection.year));
+  if (collection.location) meta.push(collection.location);
+  if (typeof collection.artworkCount === 'number' && collection.artworkCount > 0) {
+    meta.push(`${collection.artworkCount} ${collection.artworkCount === 1 ? 'work' : 'works'}`);
+  }
+
+  return {
+    collection,
+    meta: meta.join(' · '),
+    placement: `--gr:${3 + i};--oi:${3 + i * 2};--or:${4 + i * 2}`,
+  };
+});
 ---
 
 <Layout title="Home">
@@ -61,38 +88,82 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     </div>
   </section>
 
-  <section class="collection-section">
-    <div class="collection-inner">
-      <div class="collection-text reveal">
-        <p class="label">Featured Collection</p>
-        {featuredCollection ? (
-          <>
-            <h2 class="collection-title">{featuredCollection.title}</h2>
-            {featuredCollection.description && (
-              <p class="collection-desc">{featuredCollection.description}</p>
-            )}
-            <a class="collection-link" href={`/collections/${featuredCollection.slug.current}`}>
-              View collection →
-            </a>
-          </>
-        ) : (
-          <>
-            <h2 class="collection-title">Collections in progress</h2>
-            <p class="collection-desc">
-              Series and bodies of work will appear here as they are added.
-            </p>
-            <a class="collection-link" href="/collections">Browse collections →</a>
-          </>
-        )}
+  <section id="collections" class="c reveal" data-collections-index>
+    <div class:list={['c-grid', collections.length === 0 && 'c-grid-solo']}>
+      <div class="c-band">
+        <p class="c-eyebrow">
+          <span class="c-eyebrow-num">01</span>
+          <span class="c-eyebrow-rule"></span>
+        </p>
+        {/* TODO: placeholder copy from design reference — replace with RJ's line */}
+        {/* The <br> is deliberate: the two-line break is stable at every width,
+            where letting it wrap on its own breaks unpredictably around 1100-1300px. */}
+        <h2 class="c-title">
+          Every surface remembers.<br />
+          <em>Every mark</em> tells a story.
+        </h2>
+        {/* TODO: placeholder copy — replace with RJ's line */}
+        <p class="c-lede">
+          Each collection gathers work made in one place, over one stretch of time — walls,
+          rooms and surfaces that carried a story long before the paint arrived.
+        </p>
       </div>
 
-      <div class="collection-media reveal">
-        {featuredCollectionUrl ? (
-          <img src={featuredCollectionUrl} alt={featuredCollection?.title ?? ''} loading="lazy" />
-        ) : (
-          <div class="collection-media-fallback"></div>
-        )}
-      </div>
+      {collections.length > 0 && (
+        <>
+          <div class="c-well">
+            {rows.map(({ collection, placement }, i) => (
+              <a
+                class="c-shot"
+                href={`/collections/${collection.slug.current}`}
+                style={placement}
+                data-shot={i}
+                aria-hidden="true"
+                tabindex="-1"
+              >
+                {collection.coverImage ? (
+                  <img
+                    src={urlFor(collection.coverImage).width(800).format('webp').quality(82).url()}
+                    srcset={coverSrcSet(collection.coverImage)}
+                    sizes={COVER_SIZES}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <span class="c-shot-fallback"></span>
+                )}
+              </a>
+            ))}
+          </div>
+
+          <div class="c-right">
+            <div class="c-head">
+              <span class="c-head-label">Collections</span>
+              <a class="c-head-link" href="/collections">View all collections</a>
+            </div>
+
+            <div class="c-list">
+              {rows.map(({ collection, meta, placement }, i) => (
+                <a
+                  class="c-row"
+                  href={`/collections/${collection.slug.current}`}
+                  style={placement}
+                  data-row={i}
+                >
+                  <span class="c-row-top">
+                    <span class="c-row-title">{collection.title}</span>
+                    <span class="c-row-arrow" aria-hidden="true">→</span>
+                  </span>
+                  {meta && <span class="c-row-meta">{meta}</span>}
+                </a>
+              ))}
+            </div>
+
+            <a class="c-foot-link" href="/collections">View all collections</a>
+          </div>
+        </>
+      )}
     </div>
   </section>
 
@@ -182,6 +253,75 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
     update();
+  })();
+</script>
+
+<script is:inline>
+  (function () {
+    // Scoped to the section, not a global id — the page could grow a second one.
+    var root = document.querySelector('[data-collections-index]');
+    if (!root) return;
+
+    var shots = root.querySelectorAll('[data-shot]');
+    var rows = root.querySelectorAll('[data-row]');
+    if (!shots.length || !rows.length) return;
+
+    // The swap only exists at >=1024px, where the shared image well exists.
+    // Below that every image is already inline in its own row.
+    var desktop = window.matchMedia('(min-width: 1024px)');
+    var handlers = [];
+
+    function activate(index) {
+      for (var i = 0; i < shots.length; i++) {
+        shots[i].classList.toggle('is-active', i === index);
+      }
+      for (var j = 0; j < rows.length; j++) {
+        rows[j].classList.toggle('is-active', j === index);
+      }
+    }
+
+    function bind() {
+      if (handlers.length) return;
+      // .js-on hands opacity control to the script. Without it the CSS keeps
+      // the first shot visible on its own, so a failed script leaves a static
+      // section rather than an empty well.
+      root.classList.add('js-on');
+      activate(0);
+
+      for (var i = 0; i < rows.length; i++) {
+        (function (index) {
+          var row = rows[index];
+          var onEnter = function () {
+            activate(index);
+          };
+          // focusin, not focus — keyboard parity with the pointer path.
+          row.addEventListener('mouseenter', onEnter);
+          row.addEventListener('focusin', onEnter);
+          handlers.push([row, onEnter]);
+        })(i);
+      }
+    }
+
+    function unbind() {
+      if (!handlers.length) return;
+      root.classList.remove('js-on');
+      for (var i = 0; i < handlers.length; i++) {
+        handlers[i][0].removeEventListener('mouseenter', handlers[i][1]);
+        handlers[i][0].removeEventListener('focusin', handlers[i][1]);
+      }
+      handlers.length = 0;
+      activate(-1);
+    }
+
+    function sync() {
+      if (desktop.matches) bind();
+      else unbind();
+    }
+
+    sync();
+    // The media query fires only when the breakpoint is actually crossed —
+    // cheaper and more precise than re-checking on every resize event.
+    desktop.addEventListener('change', sync);
   })();
 </script>
 
@@ -377,44 +517,394 @@ const featuredCollectionUrl = featuredCollection?.coverImage
     }
   }
 
-  /* ─── FEATURED COLLECTION ─── */
-  .collection-section {
-    padding: var(--space-section) 52px;
-    background: var(--bg-secondary);
+  /* ─── 01 · COLLECTIONS INDEX ─────────────────────────────
+     One <img> per collection, moved between layouts rather than duplicated.
+     At >=1024px the images are absolutely stacked in a shared well in the left
+     column and cross-faded. Below that the well, its column wrapper and the
+     list all become display: contents, which drops their boxes and leaves the
+     images and rows as siblings of the same grid — so each pair can be placed
+     side by side (tablet) or stacked (mobile) without a second set of markup.
+     Chrome downloads display:none images anyway, so hiding a duplicate set
+     would cost the bytes twice and buy nothing. */
+  .c {
+    /* Shared so the image well can offset itself against the headline's own
+       size — see .c-well's margin-top. */
+    --c-title-size: clamp(30px, 3.6vw, 56px);
+    /* Eyebrow line box + its 26px margin. Fixed: the eyebrow is 11px at every
+       width, so this never has to scale. */
+    --c-eyebrow-block: 42.5px;
+    /* Distance from the headline's line-box top down to the ink top of a
+       capital, as a fraction of font-size. Measured in Chrome against the real
+       webfont, not assumed: Cormorant Garamond's capital is 0.625em tall
+       against a 0.926em ascent, and line-height 1.12 is tighter than the font's
+       natural 1.215, so the half-leading is negative (-2.47px at 51.84px).
+       That nets to 0.253em, well past the ~0.09em a normal-leading face would
+       give. Confirmed stable: 0.2533em at 1440px, 0.2591em at 1200px. */
+    --c-cap-drop: 0.253;
+    padding-block: 110px;
+    padding-inline: clamp(24px, 4vw, 56px);
+    background: var(--bg-primary);
+    /* Matches the fixed nav: 18px + 64px logo + 18px. See Layout.astro #nav. */
+    scroll-margin-top: 100px;
   }
 
-  .collection-inner {
+  .c-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 56px;
-    align-items: center;
   }
 
-  .collection-title {
+  .c-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 26px;
+  }
+
+  .c-eyebrow-num {
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    color: var(--accent);
+  }
+
+  .c-eyebrow-rule {
+    display: block;
+    width: 40px;
+    height: 1px;
+    background: var(--border-strong);
+  }
+
+  /* No text-wrap: balance — the line break is set manually in the markup, and
+     balancing would fight it for control of the second line.
+     No max-width either: the 52% column is the measure. */
+  .c-title {
     font-family: var(--font-serif);
     font-weight: 300;
-    font-size: clamp(28px, 4vw, 46px);
+    font-size: var(--c-title-size);
+    line-height: 1.12;
     color: var(--text-primary);
-    margin: 14px 0 0;
+    margin: 0;
   }
 
-  .collection-desc {
+  .c-title em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .c-lede {
+    max-width: 460px;
+    margin: 30px 0 0;
+    font-size: 15px;
+    line-height: 1.85;
     color: var(--text-secondary);
-    line-height: 1.7;
-    margin: 18px 0 26px;
-    max-width: 46ch;
   }
 
-  .collection-media img,
-  .collection-media-fallback {
-    width: 100%;
-    aspect-ratio: 4 / 5;
-    object-fit: cover;
+  /* The image is a second route to the same collection — aria-hidden and
+     removed from the tab order so it is not a duplicate stop for the row link
+     it sits beside, but still tappable where it is the dominant element. */
+  .c-shot {
     display: block;
   }
 
-  .collection-media-fallback {
+  .c-shot img,
+  .c-shot-fallback {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .c-shot-fallback {
     background: var(--bg-elevated);
+  }
+
+  .c-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border-strong);
+    padding-bottom: 14px;
+  }
+
+  .c-head-label {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .c-head-link,
+  .c-foot-link {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    transition: opacity var(--dur-base) ease;
+  }
+
+  .c-head-link:hover,
+  .c-foot-link:hover {
+    opacity: 0.68;
+  }
+
+  .c-row {
+    display: block;
+    padding-block: 22px;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+  }
+
+  .c-row-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .c-row-title {
+    font-family: var(--font-serif);
+    font-size: clamp(20px, 1.9vw, 28px);
+    font-weight: 400;
+    color: var(--text-primary);
+    transition: color var(--dur-base) ease;
+  }
+
+  .c-row-arrow {
+    color: var(--text-muted);
+    transition: color var(--dur-base) ease;
+  }
+
+  .c-row-meta {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  .c-row:hover .c-row-title,
+  .c-row:focus-visible .c-row-title,
+  .c-row.is-active .c-row-title,
+  .c-row:hover .c-row-arrow,
+  .c-row:focus-visible .c-row-arrow,
+  .c-row.is-active .c-row-arrow {
+    color: var(--accent);
+  }
+
+  /* ── Desktop: shared image well ── */
+  @media (min-width: 1024px) {
+    .c-grid {
+      grid-template-columns: 52% 1fr;
+      column-gap: clamp(32px, 4vw, 64px);
+      align-items: start;
+    }
+
+    .c-grid-solo {
+      grid-template-columns: 1fr;
+    }
+
+    /* All the text stacks in column 1: statement, then the list under it. */
+    .c-band {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .c-right {
+      grid-column: 1;
+      grid-row: 2;
+      margin-top: 72px;
+    }
+
+    /* Fixed ratio: the well never resizes as images swap, so a cross-fade costs
+       zero layout shift. 3/2 matches the landscape covers — 4/5 was cropping the
+       title straight off the top and bottom. max-height keeps a wide viewport
+       from pushing the well taller than the screen.
+       Rows are explicit because the well precedes the list in the DOM;
+       auto-placement would drop the list into a third row. */
+    .c-well {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      /* sticky, so the well stays put while the list scrolls past it. Offset is
+         the fixed nav (18px + 64px logo + 18px = 100px, see Layout.astro #nav)
+         plus a 40px gap. */
+      position: sticky;
+      top: calc(100px + 40px);
+      align-self: start;
+      /* Optical alignment. The grid row starts at the eyebrow, so the image has
+         to clear it (its 11px line box plus a 26px margin, both fixed), then
+         drop through the leading Cormorant Garamond carries above its capitals
+         so the image's top edge lands on the cap height of "Every" rather than
+         on the invisible line-box top. The second term scales with the
+         headline. Measured, not guessed — see --c-cap-drop. */
+      margin-top: calc(var(--c-eyebrow-block) + var(--c-title-size) * var(--c-cap-drop));
+      aspect-ratio: 3 / 2;
+      max-height: 68vh;
+      overflow: hidden;
+      background: var(--bg-elevated);
+    }
+
+    .c-shot {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 600ms var(--ease-out);
+    }
+
+    /* No-JS default. Overridden the moment the script claims control. */
+    .c-shot:first-child {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .js-on .c-shot {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .js-on .c-shot.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .c-foot-link {
+      display: none;
+    }
+  }
+
+  /* ── Below desktop: the well dissolves and each image rejoins its row ── */
+  @media (max-width: 1023px) {
+    /* display: contents already drops the well's box, so its sticky/ratio/
+       max-height never apply here. Reset them anyway — the box would come back
+       the moment anyone gives .c-well a display below this breakpoint. */
+    .c-well {
+      position: static;
+      aspect-ratio: auto;
+      max-height: none;
+    }
+
+    .c-well,
+    .c-right,
+    .c-list {
+      display: contents;
+    }
+
+    .c-shot {
+      position: static;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* height: auto matters — the base rule's height: 100% only resolves against
+       the absolutely-positioned shot on desktop. Left in place here it fights
+       aspect-ratio for control of the box. */
+    .c-shot img,
+    .c-shot-fallback {
+      height: auto;
+      aspect-ratio: 4 / 3;
+    }
+  }
+
+  /* ── Tablet: image and row share a grid row ── */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .c-grid {
+      grid-template-columns: 33% 1fr;
+      column-gap: 18px;
+      row-gap: 20px;
+    }
+
+    .c-band {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+
+    .c-head {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      margin-top: 24px;
+    }
+
+    .c-shot {
+      grid-column: 1;
+      grid-row: var(--gr);
+    }
+
+    /* stretch, not centre: the row box has to fill the grid row so its
+       border-bottom lands level with the bottom of the image beside it.
+       Centring the box leaves the rule floating in the middle of the gap.
+       The text is still optically centred, by the flex below. */
+    .c-row {
+      grid-column: 2;
+      grid-row: var(--gr);
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-block: 0;
+    }
+
+    .c-foot-link {
+      display: none;
+    }
+  }
+
+  /* ── Mobile: image stacks above its row; only the first two survive ── */
+  @media (max-width: 639px) {
+    .c {
+      padding-block: 56px;
+    }
+
+    .c-grid {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .c-band {
+      order: 1;
+    }
+
+    .c-head {
+      order: 2;
+      margin-top: 38px;
+    }
+
+    .c-shot {
+      order: var(--oi);
+      margin-bottom: 14px;
+    }
+
+    .c-row {
+      order: var(--or);
+      padding-block: 0;
+      border-bottom: none;
+      margin-bottom: 34px;
+    }
+
+    /* Four full-bleed images would bury everything under this section. These
+       are the one sanctioned display:none — they are lazy, so the bytes are
+       never spent. nth-child still counts the real DOM parent, which
+       display: contents does not disturb. */
+    .c-shot:nth-child(n + 3),
+    .c-row:nth-child(n + 3) {
+      display: none;
+    }
+
+    .c-foot-link {
+      order: 999;
+      display: block;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      border-bottom: none;
+      padding-top: 22px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .c-shot {
+      transition-duration: 1ms;
+    }
   }
 
   /* ─── SELECTED WORKS ─── */
@@ -553,7 +1043,6 @@ const featuredCollectionUrl = featuredCollection?.coverImage
 
   @media (max-width: 900px) {
     .section,
-    .collection-section,
     .about-teaser {
       padding: var(--space-section-m) 24px;
     }
@@ -587,11 +1076,6 @@ const featuredCollectionUrl = featuredCollection?.coverImage
 
     .work-card-wide {
       grid-column: span 1;
-    }
-
-    .collection-inner {
-      grid-template-columns: 1fr;
-      gap: 32px;
     }
   }
 
