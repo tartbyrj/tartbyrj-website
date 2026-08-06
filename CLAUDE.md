@@ -55,7 +55,7 @@ Plan:        Free
 - `FEATURED_ARTWORKS_QUERY` — featured==true, limit 6
 - `ALL_ARTWORKS_QUERY` — all artworks, order year desc
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
-- `ALL_COLLECTIONS_QUERY` — all collections, includes artworkCount
+- `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
 - `ABOUT_QUERY` — aboutPage singleton
 
@@ -199,7 +199,8 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 
 ## Current Build State
 ```
-Pages built:  8
+Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
+              (run `npm run build` output for current count)
 Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
 Sanity:       webhook → Cloudflare deploy hook, live
 TS errors:    0

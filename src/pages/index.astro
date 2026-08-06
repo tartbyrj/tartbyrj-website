@@ -109,6 +109,14 @@ const rows = collections.map((collection, i) => {
         </p>
       </div>
 
+      {/* Both CTAs live inside the populated branch, so the empty state needs its
+          own — otherwise the homepage offers no route to /collections at all. */}
+      {collections.length === 0 && (
+        <p class="c-empty">
+          <a class="c-empty-link" href="/collections">Browse collections →</a>
+        </p>
+      )}
+
       {collections.length > 0 && (
         <>
           <div class="c-well">
@@ -644,8 +652,24 @@ const rows = collections.map((collection, i) => {
   }
 
   .c-head-link:hover,
-  .c-foot-link:hover {
+  .c-foot-link:hover,
+  .c-empty-link:hover {
     opacity: 0.68;
+  }
+
+  /* Empty state only — never renders alongside the list. */
+  .c-empty {
+    margin: 44px 0 0;
+  }
+
+  .c-empty-link {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    transition: opacity var(--dur-base) ease;
   }
 
   .c-row {
@@ -888,6 +912,14 @@ const rows = collections.map((collection, i) => {
        display: contents does not disturb. */
     .c-shot:nth-child(n + 3),
     .c-row:nth-child(n + 3) {
+      display: none;
+    }
+
+    /* The footer link takes over as the section's single CTA down here. Leaving
+       the header one visible would put two identical "View all collections"
+       links in the same section — noise in a screen reader's link list, and it
+       crowds the label off the edge at 320px. */
+    .c-head-link {
       display: none;
     }
 

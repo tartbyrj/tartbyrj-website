@@ -19,18 +19,17 @@ export const ARTWORK_BY_SLUG_QUERY = `
 }
 `;
 
-export const ALL_COLLECTIONS_QUERY = `
-*[_type=="collection"]|order(year desc){
-  title,slug,year,location,description,
-  coverImage,"artworkCount":count(artworks)
-}
-`;
-
-// Homepage "Collections index" section. Deliberately narrower than
-// ALL_COLLECTIONS_QUERY: no description, and capped at 4 so the section can
-// never grow past the layout it was designed for.
+// Homepage "Collections index" section. Capped at 4 so the section can never
+// grow past the layout it was designed for. /collections carries its own inline
+// query — it projects slug as a string, so the two are not interchangeable.
+//
+// defined(coverImage.asset) is load-bearing: the image well is this section's
+// primary UI, so a cover-less collection would hover-swap to an empty panel and
+// read as a broken image rather than as graceful degradation. Such collections
+// stay reachable via /collections and /collections/[slug], and rejoin this
+// section on their own once a cover is uploaded in Studio.
 export const COLLECTIONS_INDEX_QUERY = `
-*[_type=="collection"]|order(year desc)[0...4]{
+*[_type=="collection"&&defined(coverImage.asset)]|order(year desc)[0...4]{
   title,slug,year,location,coverImage,
   "artworkCount":count(artworks)
 }
