@@ -14,7 +14,6 @@
 - Responsive across three breakpoints: two columns ≥1024px, inline 33% image rows at 640–1023px, stacked full-width images (2 rows) below 640px
 - Hover **and** keyboard-focus image swap; JS scoped via `[data-collections-index]`, unbound below 1024px via `matchMedia`
 - One `<img>` per collection, repositioned with `display: contents` + grid/order rather than duplicated per breakpoint
-- Brand logo wired into nav (64px) and footer (180px) with a text-wordmark fallback — `src/assets/tart-logo.png`
 - ARCHITECTURE.md §17 written; CLAUDE.md build state and deployment corrected
 
 ### Decisions

@@ -36,6 +36,9 @@ export default defineType({
       title: 'Description',
       type: 'text',
     }),
+    // Required because the homepage collections index filters on
+    // defined(coverImage.asset) — a cover-less collection silently drops out of
+    // that section. Failing in Studio before publish beats disappearing after.
     defineField({
       name: 'coverImage',
       title: 'Cover Image',
@@ -43,6 +46,7 @@ export default defineType({
       options: {
         hotspot: true,
       },
+      validation: (Rule) => Rule.required().error('A cover image is required before publishing'),
     }),
     defineField({
       name: 'storyPages',

@@ -129,6 +129,10 @@ const rows = collections.map((collection, i) => {
                 aria-hidden="true"
                 tabindex="-1"
               >
+                {/* COLLECTIONS_INDEX_QUERY filters on defined(coverImage.asset),
+                    so the fallback is unreachable today. Kept because coverImage
+                    is typed nullish — this is the narrowing that lets
+                    coverSrcSet take a non-null cover without an assertion. */}
                 {collection.coverImage ? (
                   <img
                     src={urlFor(collection.coverImage).width(800).format('webp').quality(82).url()}
@@ -657,7 +661,11 @@ const rows = collections.map((collection, i) => {
     opacity: 0.68;
   }
 
-  /* Empty state only — never renders alongside the list. */
+  /* Empty state only — never renders alongside the list. It is a direct child
+     of .c-grid, so it needs placement in every breakpoint's layout: without an
+     explicit order it defaults to 0 and sorts above the headline in the mobile
+     flex column, and without a column span it lands in the narrow first column
+     of the tablet grid. */
   .c-empty {
     margin: 44px 0 0;
   }
@@ -799,7 +807,7 @@ const rows = collections.map((collection, i) => {
   }
 
   /* ── Below desktop: the well dissolves and each image rejoins its row ── */
-  @media (max-width: 1023px) {
+  @media (max-width: 1023.98px) {
     /* display: contents already drops the well's box, so its sticky/ratio/
        max-height never apply here. Reset them anyway — the box would come back
        the moment anyone gives .c-well a display below this breakpoint. */
@@ -832,7 +840,7 @@ const rows = collections.map((collection, i) => {
   }
 
   /* ── Tablet: image and row share a grid row ── */
-  @media (min-width: 640px) and (max-width: 1023px) {
+  @media (min-width: 640px) and (max-width: 1023.98px) {
     .c-grid {
       grid-template-columns: 33% 1fr;
       column-gap: 18px;
@@ -842,6 +850,11 @@ const rows = collections.map((collection, i) => {
     .c-band {
       grid-column: 1 / -1;
       grid-row: 1;
+    }
+
+    /* Full width, or it auto-places into the 33% image column. */
+    .c-empty {
+      grid-column: 1 / -1;
     }
 
     .c-head {
@@ -875,7 +888,7 @@ const rows = collections.map((collection, i) => {
   }
 
   /* ── Mobile: image stacks above its row; only the first two survive ── */
-  @media (max-width: 639px) {
+  @media (max-width: 639.98px) {
     .c {
       padding-block: 56px;
     }
@@ -887,6 +900,11 @@ const rows = collections.map((collection, i) => {
 
     .c-band {
       order: 1;
+    }
+
+    /* Without this it defaults to order 0 and sorts above the headline. */
+    .c-empty {
+      order: 2;
     }
 
     .c-head {
