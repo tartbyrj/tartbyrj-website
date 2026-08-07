@@ -83,9 +83,24 @@
   --space-section:   100px;
   --space-section-m: 56px;
 
+  /* Layout — height of the fixed nav bar (18px + 64px logo + 18px).
+     Anything that has to sit clear of the nav offsets against this.
+     Keep in sync with #nav's --logo-h and padding in Layout.astro. */
+  --nav-h:           100px;
+
   /* Motion */
   --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
   --dur-base:        0.35s;
   --dur-slow:        0.7s;
   --dur-theme:       0.4s;     /* theme switch transition */
+}
+
+/* Below 900px the nav drops to --logo-h: 44px on the same 18px padding, so the
+   bar is 80px, not 100px. Without this override every scroll-margin-top and
+   sticky offset that reads --nav-h overshoots by 20px on a phone. Same
+   breakpoint as #nav's own media block in Layout.astro — keep the two in sync. */
+@media (max-width: 900px) {
+  :root {
+    --nav-h: 80px;
+  }
 }

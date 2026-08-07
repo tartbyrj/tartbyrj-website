@@ -25,3 +25,4 @@ pnpm-debug.log*
 
 # per-developer Claude Code permissions — never share auto-approve rules
 .claude/settings.local.json
+.claude/

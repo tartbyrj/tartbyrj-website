@@ -6,6 +6,48 @@
 
 ---
 
+## Session: 2026-08-05
+
+### Completed
+- Homepage section 2 rebuilt as the **D1 collections index** — merged what were previously two separate sections (statement block + 3-card Featured Collections grid) into one editorial index
+- `COLLECTIONS_INDEX_QUERY` added to `src/lib/sanity/queries.ts` — 4 collections, `year desc`, with `count(artworks)`
+- Responsive across three breakpoints: two columns ≥1024px, inline 33% image rows at 640–1023px, stacked full-width images (2 rows) below 640px
+- Hover **and** keyboard-focus image swap; JS scoped via `[data-collections-index]`, unbound below 1024px via `matchMedia`
+- One `<img>` per collection, repositioned with `display: contents` + grid/order rather than duplicated per breakpoint
+- ARCHITECTURE.md §17 written; CLAUDE.md build state and deployment corrected
+
+### Decisions
+- Section order locked: Hero → Collections → Recent Works → The Artist → Exhibitions → Footer
+- **Single-break background rule** — all artwork-bearing sections on `--bg-primary`; The Artist alone uses `--bg-elevated`. Simultaneous contrast: artwork must be judged against one constant neutral
+- D1 editorial index chosen over grid / rail / slider
+- Row caps: 4 desktop and tablet, 2 mobile
+- CTA target always `/collections`, never a slug
+- `alt=""` in the index, with descriptive `altText` reserved for the detail page
+- Image well `3/2`, not `4/5` — RJ's covers are landscape Canva exports
+- Well aligns to the headline's cap height (measured `0.253em`, not the assumed `0.09em` — Cormorant's cap is `0.625em` against a `0.926em` ascent, and `line-height: 1.12` makes the half-leading negative)
+
+### Rejected
+- Alternating section backgrounds — reads as template, doubles up with the hairline + eyebrow separators
+- Auto-advancing slider — competes with the Hero animation, WCAG 2.2.2 exposure
+- Horizontal card rail — most items offscreen
+- Caption-over-image cards — gradient covers the lower third of the artwork
+- Full-width headline band — left too much dead space beside the headline
+
+### Bugs
+- Image well `4/5` was cropping collection titles straight off the cover → `3/2` + `max-height: 68vh`
+- Column imbalance from placing the well below the lede in the left column — left ran ~3× taller than right
+- Tablet row divider floated mid-gap (`align-self: center` on a short box in a tall grid row) → `align-self: stretch` with flex centering
+
+### Next Session Candidates
+- Recent Works section (grid, uneven aspect ratios, meta on hover)
+- The Artist section (`--bg-elevated`)
+- Upcoming Exhibitions section
+- Replace placeholder headline and lede with RJ's copy (two `TODO`s in `index.astro`)
+- Add `altText` field to `src/sanity/schemas/collection.ts` for the detail page
+- Custom domain DNS (Phase 4)
+
+---
+
 ## Session: 2026-07-31
 
 ### Completed

@@ -55,7 +55,7 @@ Plan:        Free
 - `FEATURED_ARTWORKS_QUERY` — featured==true, limit 6
 - `ALL_ARTWORKS_QUERY` — all artworks, order year desc
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
-- `ALL_COLLECTIONS_QUERY` — all collections, includes artworkCount
+- `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
 - `ABOUT_QUERY` — aboutPage singleton
 
@@ -120,6 +120,17 @@ SESSIONS.md                     ← session log (read last 2 entries on start)
 ```
 Full token list in `src/styles/tokens.css`.
 
+### Homepage
+Composition, section order and the rationale behind each choice live in
+**ARCHITECTURE.md §17**. Read it before touching `src/pages/index.astro`.
+
+The two rules most likely to be broken by a future session:
+- **Do not add background changes to any homepage section except The Artist.**
+  Every artwork-bearing section stays on `var(--bg-primary)`; The Artist
+  (`var(--bg-elevated)`) is the page's single tonal break.
+- **Do not duplicate collection images per breakpoint.** One `<img>` per
+  collection, repositioned with CSS.
+
 ---
 
 ## Conventions — Always Follow
@@ -138,7 +149,7 @@ const data = parsed.data
 ```
 
 ### Zod schema notes
-- `artwork.collection` field: `.nullish()` not `.optional()` — GROQ returns `null` (not `undefined`) when no collection assigned. Shape supports both dereferenced `{title,slug}` and raw `{_ref}`.
+- **Every optional field is `.nullish()`, never `.optional()`** — GROQ returns `null` (not `undefined`) for anything unset in Studio, and `.optional()` rejects `null`, which makes `parseList` drop the whole document. Instances: `artwork.collection` (also shaped to accept both the dereferenced `{title,slug}` and the raw `{_ref}`), and `image.hotspot` / `image.crop` on `artwork.image` and `collection.coverImage`.
 - `collection.artworkCount`: `z.number().optional()` — computed field from GROQ, would be stripped otherwise.
 
 ### Image URLs
@@ -182,27 +193,31 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - Never add cookie banners — Cloudflare Analytics is cookie-free
 - Never skip `alt` text on artwork images
 - Never defer the theme init script — must be inline in `<head>`
+- Never render the same Sanity image twice in markup to serve different breakpoints — reposition one `<img>` with CSS instead
 
 ---
 
 ## Current Build State
 ```
-Pages built:  6 (/, /works, /about, /contact, /collections, /studio)
-Dynamic:      /works/[slug] — 0 paths (no Sanity content yet)
-              /collections/[slug] — 0 paths (no Sanity content yet)
+Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
+              (run `npm run build` output for current count)
+Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
+Sanity:       webhook → Cloudflare deploy hook, live
 TS errors:    0
 Build:        clean
 ```
 
 ---
 
-## Deployment (Phase 3 — not yet done)
-1. CORS: add `http://localhost:4321`, `https://tartbyrj.pages.dev`, `https://tartbyrj.com` in Sanity dashboard → API → CORS Origins (allow credentials)
-2. GitHub: `git init && git add . && git commit -m "initial: T.Art by RJ"` → push to new repo
-3. Cloudflare Pages: connect GitHub repo, build command `npm run build`, output `dist`
-4. Env vars in Cloudflare: `PUBLIC_SANITY_PROJECT_ID=tuvy3sp7`, `PUBLIC_SANITY_DATASET=production`
-5. Sanity webhook → Cloudflare deploy hook (auto-rebuild on Sanity publish)
-6. Custom domain → DNS to Cloudflare Pages
+## Deployment
+Phase 3 is **done** — the site is live and rebuilds automatically:
+1. ✅ CORS origins added in Sanity dashboard → API → CORS Origins
+2. ✅ GitHub: `tartbyrj/tartbyrj-website`, `main`
+3. ✅ Cloudflare Pages connected — build `npm run build`, output `dist`
+4. ✅ Env vars set in Cloudflare: `PUBLIC_SANITY_PROJECT_ID`, `PUBLIC_SANITY_DATASET`
+5. ✅ Sanity webhook → Cloudflare deploy hook (auto-rebuild on publish)
+
+**Remaining — Phase 4:** custom domain `tartbyrj.com` → DNS to Cloudflare Pages
 
 ## Phase 2 Features (not yet built)
 - Contact/inquiry form — Formspree (placeholder at /contact)

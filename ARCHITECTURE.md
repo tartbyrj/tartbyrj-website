@@ -416,6 +416,17 @@ Never serve original unoptimised files to the browser.
 - Astro ships ~0 JS by default — keep it that way
 - Every image has alt text — non-negotiable
 
+### Alt text nuance — decorative vs. standalone
+
+"Every image has alt text" does not mean every image gets *descriptive* alt.
+
+An image inside a link that already contains the collection title as visible
+text takes `alt=""`. Adding descriptive alt there concatenates into the link's
+accessible name, and screen readers announce the title twice.
+
+Descriptive `altText` is still required wherever an image stands alone without an
+adjacent text label — for example the cover hero on `/collections/[slug]`.
+
 ---
 
 ## 9. Animation Principles
@@ -679,7 +690,85 @@ Domain:               (confirm registrar)
 
 ---
 
+## 17. Homepage Composition
+
+### Section order (locked)
+
+> Sections 3–5 (Works, Artist, Exhibitions) are specified, not yet built.
+
+| # | Section | Anchor |
+|---|---|---|
+| 1 | Hero | `hero-track` |
+| 2 | Collections index | `id="collections"` |
+| 3 | Recent Works | `id="works"` |
+| 4 | The Artist | `id="artist"` |
+| 5 | Upcoming Exhibitions | `id="exhibitions"` |
+| 6 | Footer | in `Layout.astro` |
+
+### Background rule (locked)
+
+All artwork-bearing sections stay on `var(--bg-primary)`. **The Artist section is
+the single tonal break on the page**, using `var(--bg-elevated)`, and carries no
+`border-top` rule — its background change *is* the separator.
+
+Rationale: simultaneous contrast. A painting reads differently against different
+grounds, so artwork must be judged against one constant neutral.
+
+Alternating backgrounds were explicitly rejected — they read as template, and
+they double up with the existing hairline + eyebrow separator system.
+
+### Section separator pattern
+
+`border-top: 1px solid var(--border-strong)`, `padding-top: 22px`, uppercase
+eyebrow label left, secondary item right. Applies to Collections, Works and
+Exhibitions.
+
+### Collections index (section 2) — the D1 "editorial index" pattern
+
+Rejected alternatives, and why:
+
+| Alternative | Why rejected |
+|---|---|
+| 3-card grid | Thumbnails at ~300px reduce paintings to swatches |
+| Horizontal scroll rail | Same problem, plus most items sit offscreen |
+| Auto-advancing slider | Motion competes with the Hero's scroll animation, WCAG 2.2.2 exposure, and it still shows one collection at a time |
+| Caption-over-image cards | The gradient overlay covers the lower third of the artwork. Acceptable for a museum showing others' work; not for an artist whose site *is* the work |
+
+Chosen structure at `>=1024px` — two columns, both top-aligned:
+
+- **Left (52%)** — eyebrow, headline, lede, then the collections list
+- **Right (1fr)** — sticky image well, `aspect-ratio: 3/2`, `max-height: 68vh`
+- Hover or keyboard-focus on a row crossfades the well
+- The well aligns to the headline's **cap height**, not its line box
+
+Row caps: 4 rows on desktop and tablet, 2 rows on mobile, then
+"View all collections".
+
+The CTA target is always `/collections` — never a slug. It is the only route to
+`/collections` from this section; there is no separate "Explore Collections"
+button.
+
+### Responsive rules
+
+| Breakpoint | Behaviour |
+|---|---|
+| `>=1024px` | Two columns as above, hover-swap active |
+| `640–1023px` | Single column, well removed from flow, each row's image inline at 33% width, hover-swap JS unbound |
+| `<640px` | Single column, each row's image full-width above its title, 2 rows only |
+
+### One-image rule (important)
+
+Each collection renders **exactly one `<img>` in the DOM**, repositioned by CSS
+per breakpoint — absolutely positioned into the well on desktop, static and
+inline below it.
+
+Never duplicate images and hide one set with `display: none`. Chrome still
+downloads `display: none` images, which doubles image weight against the
+Lighthouse 98+ target.
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: July 2025 — Initial architecture*
+*Last updated: August 2026 — homepage composition*

@@ -311,7 +311,11 @@ const logo = Object.values(logoFiles)[0]?.default;
      every other page hardcodes a top offset to clear this fixed bar (140px on
      /works and /collections, 150px /about, 160px /contact, 120px mobile). At
      64 + 2×18 the bar is 100px, leaving 40-60px of breathing room. Push the
-     logo much past this and page headings start tucking under the nav. */
+     logo much past this and page headings start tucking under the nav.
+     That 100px is published as --nav-h in tokens.css for things that offset
+     against it — change --logo-h or this padding and --nav-h must follow.
+     The 900px block below drops --logo-h to 44px for an 80px bar; tokens.css
+     overrides --nav-h at the same breakpoint to match. */
   #nav {
     --logo-h: 64px;
     position: fixed;
