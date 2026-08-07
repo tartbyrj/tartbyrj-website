@@ -6,6 +6,65 @@
 
 ---
 
+## Session: 2026-08-07
+
+### Completed
+- Removed old "Selected Works" section — superseded by `#works`
+- `#works` Recent Works section built: uneven grid (`1.65fr/1fr/1fr` row 1, equal 3-col row 2), featured-first + fill-to-6 with recent, meta always visible, featured badge
+- `HOMEPAGE_WORKS_QUERY` in `queries.ts`: `defined(image.asset)` + `defined(slug.current)`, `[0..5]` slice, `featured desc` + `year desc` order
+- Homepage singleton schema: `src/sanity/schemas/homepage.ts`, pinned id, compose button blocked in `sanity.config.ts`
+- `HOMEPAGE_QUERY` + `HomepageSchema` (`src/types/homepage.ts`) wired to hero — `heroArtwork` → fallback to `featuredArtworks[0]` at artwork level not field level
+- Hero gets `fetchpriority="high"`; all works tiles `loading="lazy"`
+- `--nav-h: 80px` mobile override in `tokens.css`
+- `ArtworkSchema` + `CollectionSchema`: `hotspot`/`crop` added as `.nullish()` (was `.optional()` — GROQ returns `null`, not `undefined`)
+- Focus rings moved to `global.css` unscoped — was cid-locked to Layout only
+- `--text-muted` contrast fixed to meet WCAG AA 4.5:1 both themes
+- `--text-secondary` light raised `0.52` → `0.72` (3.61:1 → 6.37:1) — every text token now clears AA on every background in both themes
+- `.rw-title` 14px → 17px (large tile 20px); `.rw-sub` 7px → 10px
+- `prefers-reduced-motion` guard added to `.reveal` in `global.css`
+- `altText` field description in `artwork.ts` updated with examples for RJ
+- `tokens.css` inverted alpha comment corrected
+
+### Decisions
+- Hero image = `heroArtwork` reference on homepage singleton, not `featuredArtworks[0]` — uploading new artwork no longer replaces hero
+- Fallback at artwork level not field level — prevents mismatched image + caption from two different artworks
+- `Rule.required()` kept on `heroArtwork` — fallback is "no doc" state, not "unset field" state
+- `.nullish()` is the project-wide rule for all Sanity fields — not a quirk of `artwork.collection`. CLAUDE.md updated to generalise
+- Focus rings in `global.css` unscoped — scoped styles can never reach cross-component links
+- `--text-muted` fix in `tokens.css` not locally — local fix = site-wide inconsistency
+- Tap targets (`.rw-head-link`, `.rw-empty`) deferred — requires layout changes
+
+### Rejected / Deferred
+- Video in hero — Lighthouse Performance killer, defer until after audit
+- `FEATURED_ARTWORKS_QUERY` rename → `HERO_ARTWORK_QUERY` — cosmetic, defer to fresh session as standalone task
+- Tap target fix for text links — logged as known debt
+- Per-field hero fallback — rejected, risks caption from wrong artwork
+- Merging `--text-secondary` and `--text-muted` into one token — they now sit 0.10 apart in alpha and barely differ; separation belongs in size/weight/tracking. Proposal only, not started
+
+### Bugs
+- `FEATURED_ARTWORKS_QUERY` sole consumer is now hero fallback only, not Recent Works — CLAUDE.md note updated; removing it breaks hero silently
+- `--gr`/`--oi`/`--or` fragile coupling — known debt, not fixed
+- `sanity.config.ts` compose button originally not blocked — fixed this session
+- Adding `hotspot`/`crop` as `.optional()` dropped **every** artwork from the homepage grid (GROQ returns `null`); caught only because the zero-state branch landed in the same pass
+- `.reveal` starts at `opacity: 0` and waits on the IntersectionObserver, so any screenshot tool or scraper that does not run scroll events sees a blank page below the fold — not fixed
+
+### Not Verified
+- Studio compose menu with `newDocumentOptions` — code compiles, never seen in an authed browser
+- Keyboard tab-through of the new focus rings — never run live
+- Collection `hotspot` fix is latent: no collection has a hotspot set, so the 3/2 well change is unproven
+
+### Next Session Candidates
+- Rename `FEATURED_ARTWORKS_QUERY` → `HERO_ARTWORK_QUERY`
+- The Artist section (`--bg-elevated`, teaser, portrait + pull quote) — needs real content from RJ first
+- Upcoming Exhibitions section
+- RJ to provide: portrait photo, real pull quote (current = reference file placeholder)
+- RJ to provide: real homepage headline + lede (current = placeholder copy)
+- DNS connection tartbyrj.com → Cloudflare Pages (Phase 4)
+- Upload remaining painting photos + set hotspots in Studio
+- Tap target fix: `.rw-head-link` and `.rw-empty` link min 24×24px
+
+---
+
 ## Session: 2026-08-05
 
 ### Completed
