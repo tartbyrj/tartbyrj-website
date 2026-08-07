@@ -149,7 +149,7 @@ const data = parsed.data
 ```
 
 ### Zod schema notes
-- `artwork.collection` field: `.nullish()` not `.optional()` — GROQ returns `null` (not `undefined`) when no collection assigned. Shape supports both dereferenced `{title,slug}` and raw `{_ref}`.
+- **Every optional field is `.nullish()`, never `.optional()`** — GROQ returns `null` (not `undefined`) for anything unset in Studio, and `.optional()` rejects `null`, which makes `parseList` drop the whole document. Instances: `artwork.collection` (also shaped to accept both the dereferenced `{title,slug}` and the raw `{_ref}`), and `image.hotspot` / `image.crop` on `artwork.image` and `collection.coverImage`.
 - `collection.artworkCount`: `z.number().optional()` — computed field from GROQ, would be stripped otherwise.
 
 ### Image URLs

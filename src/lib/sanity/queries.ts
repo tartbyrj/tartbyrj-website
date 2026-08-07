@@ -35,6 +35,25 @@ export const COLLECTIONS_INDEX_QUERY = `
 }
 `;
 
+// Homepage "Recent Works" section. featured desc puts the flagged works first
+// (true sorts above false), then year desc fills the remaining slots with the
+// most recent. [0..5] is inclusive on both ends — exactly 6 documents.
+//
+// defined(image.asset) mirrors COLLECTIONS_INDEX_QUERY: a tile in this grid is
+// nothing but its image, so an artwork with no upload would render as an empty
+// frame. Such artworks stay reachable via /works and /works/[slug], and rejoin
+// this section on their own once an image is uploaded in Studio.
+//
+// defined(slug.current) guards the slice, which GROQ applies before Zod ever
+// runs: a slug-less draft would claim one of the six slots and then fail
+// validation, silently shrinking the grid to five.
+export const HOMEPAGE_WORKS_QUERY = `
+*[_type=="artwork"&&defined(image.asset)&&defined(slug.current)]|order(featured desc,year desc)[0..5]{
+  title,slug,year,medium,featured,altText,
+  image{asset,hotspot,crop}
+}
+`;
+
 export const COLLECTION_BY_SLUG_QUERY = `
 *[_type=="collection"&&slug.current==$slug][0]{
   title,slug,year,location,description,
