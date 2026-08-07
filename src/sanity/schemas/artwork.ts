@@ -70,7 +70,12 @@ export default defineType({
       title: 'Alt Text',
       type: 'string',
       description:
-        'Accessibility description of the artwork image (used for screen readers and SEO)',
+        'Describe what is visible in the painting — subject, medium, and mood. ' +
+        'Used by screen readers and Google Images. ' +
+        'Example: "Watercolour owl portrait with amber eyes and detailed feather ' +
+        'texture" or "Layered acrylic on canvas with fragments of handwritten ' +
+        'text in earth and grey tones". One to two sentences. Describe what you ' +
+        'see, not what it means.',
     }),
   ],
   orderings: [
