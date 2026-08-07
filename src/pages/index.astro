@@ -36,7 +36,13 @@ if (!homepageParsed.success && homepageRaw != null) {
 // The whole artwork falls back as a unit, not field by field: the image, the
 // alt text and the plate all describe one painting, and sourcing them from two
 // different documents would caption the hero with the wrong work.
-const heroArtwork = (homepageParsed.success ? homepageParsed.data.heroArtwork : null) ?? null;
+// An artwork with no image is no use to a full-bleed hero: the frame falls back
+// to its gradient while the plate keeps captioning a painting that is not
+// there. Guarded here rather than as defined(heroArtwork->image.asset) on the
+// query, because that condition would hide the whole singleton — every field it
+// grows later included — over one missing upload.
+const chosen = homepageParsed.success ? homepageParsed.data.heroArtwork : null;
+const heroArtwork = chosen?.image ? chosen : null;
 const hero = heroArtwork ?? featuredArtworks[0] ?? null;
 
 const heroImage = hero?.image;

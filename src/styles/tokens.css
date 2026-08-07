@@ -17,9 +17,9 @@
   --text-secondary: rgba(26, 20, 18, 0.72);
   /* 0.62 is the measured floor for 4.5:1 on the darkest surface this sits on
      (--bg-elevated, 4.62:1); it clears 4.98:1 on --bg-primary. At the old 0.28
-     it was 1.86:1 — invisible text. Higher alpha than --text-secondary is
-     deliberate, not an inversion: --text-muted carries 10px uppercase labels,
-     which read lighter than the 15px prose --text-secondary carries. */
+     it was 1.86:1 — invisible text. Stays below --text-secondary's 0.72, so the
+     two tiers read in the order their names imply. The gap is only 0.10; the
+     real separation between them comes from size, weight and tracking. */
   --text-muted:     rgba(26, 20, 18, 0.62);
 
   /* Accent (warm sienna/bronze) */
