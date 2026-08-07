@@ -5,10 +5,12 @@ import { parseList } from '../lib/sanity/parse';
 import {
   FEATURED_ARTWORKS_QUERY,
   COLLECTIONS_INDEX_QUERY,
+  HOMEPAGE_QUERY,
   HOMEPAGE_WORKS_QUERY,
 } from '../lib/sanity/queries';
 import { ArtworkSchema, type Artwork } from '../types/artwork';
 import { CollectionSchema, type Collection } from '../types/collection';
+import { HomepageSchema } from '../types/homepage';
 
 const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
 const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORKS_QUERY');
@@ -16,8 +18,31 @@ const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORK
 const collectionsRaw = await client.fetch(COLLECTIONS_INDEX_QUERY).catch(() => null);
 const collections = parseList(CollectionSchema, collectionsRaw, 'COLLECTIONS_INDEX_QUERY');
 
-const heroImage = featuredArtworks[0]?.image;
+// ─── HERO ───
+// The singleton is optional infrastructure: until someone creates the document
+// in Studio, GROQ returns null and the hero keeps the behaviour it had before
+// this field existed. A null raw result is that ordinary case, not a fault, so
+// only a document that exists and fails validation is worth a warning.
+const homepageRaw = await client.fetch(HOMEPAGE_QUERY).catch(() => null);
+const homepageParsed = HomepageSchema.safeParse(homepageRaw);
+if (!homepageParsed.success && homepageRaw != null) {
+  console.warn(
+    `[sanity] HOMEPAGE_QUERY: ignoring homepage document — ${homepageParsed.error.issues
+      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('; ')}`
+  );
+}
+
+// The whole artwork falls back as a unit, not field by field: the image, the
+// alt text and the plate all describe one painting, and sourcing them from two
+// different documents would caption the hero with the wrong work.
+const heroArtwork = (homepageParsed.success ? homepageParsed.data.heroArtwork : null) ?? null;
+const hero = heroArtwork ?? featuredArtworks[0] ?? null;
+
+const heroImage = hero?.image;
 const heroUrl = heroImage ? urlFor(heroImage).width(1920).format('webp').url() : undefined;
+const heroAlt = hero?.altText ?? hero?.title ?? '';
+const heroPlate = hero ? [hero.title, hero.medium, hero.year].filter(Boolean).join(' · ') : '';
 
 // Each collection gets exactly one <img>; the browser picks the width from
 // srcset rather than the markup shipping a copy per breakpoint.
@@ -109,7 +134,7 @@ const tiles = recentWorks.map((artwork, i) => ({
           <img
             class="hero-media"
             src={heroUrl}
-            alt={featuredArtworks[0]?.altText ?? featuredArtworks[0]?.title ?? ''}
+            alt={heroAlt}
             loading="eager"
             fetchpriority="high"
           />
@@ -127,13 +152,7 @@ const tiles = recentWorks.map((artwork, i) => ({
         <p class="hero-subtitle">Material Memory · Mark Making</p>
       </div>
 
-      {featuredArtworks[0] && (
-        <p class="hero-plate">
-          {[featuredArtworks[0].title, featuredArtworks[0].medium, featuredArtworks[0].year]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
-      )}
+      {heroPlate && <p class="hero-plate">{heroPlate}</p>}
 
       <div class="hero-scroll">
         <span class="hero-scroll-line"></span>
@@ -1074,6 +1093,10 @@ const tiles = recentWorks.map((artwork, i) => ({
     color: var(--text-secondary);
   }
 
+  /* KNOWN DEBT: 11px text on a 2px pad is a ~16px-tall hit area, under WCAG
+     2.2's 24×24 minimum (2.5.8). Fixing it means padding the link and
+     re-balancing the header row's baseline alignment, so it is deferred rather
+     than bolted on. .rw-empty's inline link has the same problem. */
   .rw-head-link {
     font-size: 11px;
     letter-spacing: 0.16em;
@@ -1155,11 +1178,14 @@ const tiles = recentWorks.map((artwork, i) => ({
     margin-top: 4px;
   }
 
+  /* 17px, not the 14px this started at: Cormorant Garamond's x-height is small
+     enough that it read a size or two below the 10px sans metadata under it,
+     which inverted the tile's hierarchy. */
   .rw-title {
     display: block;
     font-family: var(--font-serif);
     font-weight: 400;
-    font-size: 14px;
+    font-size: 17px;
     line-height: 1.2;
     color: var(--text-primary);
     transition: color var(--dur-base) var(--ease-out);
@@ -1181,7 +1207,7 @@ const tiles = recentWorks.map((artwork, i) => ({
 
   @media (min-width: 900px) {
     .rw-tile-lg .rw-title {
-      font-size: 16px;
+      font-size: 20px;
     }
   }
 

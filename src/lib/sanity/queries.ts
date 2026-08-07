@@ -62,6 +62,19 @@ export const COLLECTION_BY_SLUG_QUERY = `
 }
 `;
 
+// Homepage singleton. [0] on a type that should only ever hold one document —
+// see the structure resolver in sanity.config.ts, which pins it to a fixed id.
+// heroArtwork is dereferenced inline so the hero needs a single round trip;
+// image carries hotspot and crop, which urlFor() applies to the full-bleed crop.
+export const HOMEPAGE_QUERY = `
+*[_type=="homepage"][0]{
+  heroArtwork->{
+    title,slug,medium,year,altText,
+    image{asset,hotspot,crop}
+  }
+}
+`;
+
 export const ABOUT_QUERY = `
 *[_type=="aboutPage"][0]{
   biography,statement,portrait

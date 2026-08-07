@@ -79,3 +79,25 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* The IntersectionObserver still runs and still adds .visible — only the
+   travel is dropped, so content is present from first paint rather than
+   waiting on a transition it will never see. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Lives here, unscoped, on purpose: an Astro component's <style> compiles to
+   a[data-astro-cid-…]:focus-visible, which matches only that component's own
+   markup. Declared in Layout.astro it covered the nav and footer and silently
+   skipped every link on every page. */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 1px;
+}

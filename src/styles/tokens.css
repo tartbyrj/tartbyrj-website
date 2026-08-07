@@ -10,8 +10,17 @@
 
   /* Text */
   --text-primary:   #1a1412;
-  --text-secondary: rgba(26, 20, 18, 0.52);
-  --text-muted:     rgba(26, 20, 18, 0.28);
+  /* 0.72 measures 7.04:1 on --bg-primary and 6.34:1 on --bg-elevated; the old
+     0.52 was 3.61:1 and failed AA. 0.62 would have cleared the threshold but
+     lands on --text-muted's value, collapsing the two tiers into one colour.
+     Recession here comes from size, weight and tracking, not from faintness. */
+  --text-secondary: rgba(26, 20, 18, 0.72);
+  /* 0.62 is the measured floor for 4.5:1 on the darkest surface this sits on
+     (--bg-elevated, 4.62:1); it clears 4.98:1 on --bg-primary. At the old 0.28
+     it was 1.86:1 — invisible text. Higher alpha than --text-secondary is
+     deliberate, not an inversion: --text-muted carries 10px uppercase labels,
+     which read lighter than the 15px prose --text-secondary carries. */
+  --text-muted:     rgba(26, 20, 18, 0.62);
 
   /* Accent (warm sienna/bronze) */
   --accent:         #7a4f2a;
@@ -47,7 +56,9 @@
   /* Text */
   --text-primary:   #f0ebe3;
   --text-secondary: rgba(240, 235, 227, 0.55);
-  --text-muted:     rgba(240, 235, 227, 0.28);
+  /* Dark needs less: 0.50 measures 4.64:1 at worst. Kept below --text-secondary
+     so the hierarchy reads the way the names imply on this theme. */
+  --text-muted:     rgba(240, 235, 227, 0.50);
 
   /* Accent (warm gold) */
   --accent:         #c9a96e;
