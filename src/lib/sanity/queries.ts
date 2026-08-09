@@ -35,9 +35,22 @@ export const COLLECTIONS_INDEX_QUERY = `
 }
 `;
 
-// Homepage "Recent Works" section. featured desc puts the flagged works first
-// (true sorts above false), then year desc fills the remaining slots with the
-// most recent. [0..5] is inclusive on both ends — exactly 6 documents.
+// Homepage "Recent Works" section. (featured==true) desc puts the flagged works
+// first, then year desc fills the remaining slots with the most recent.
+//
+// The comparison is not redundant: featured is optional in the schema, so an
+// artwork whose toggle was never touched in Studio comes back null, and GROQ
+// orders null *above* true on a descending sort. Sorting on the raw field
+// therefore handed the lead slot — the wide 1.65fr column — to whichever work
+// had never been considered for featuring. (featured==true) evaluates to a real
+// boolean for every document, null included, so false sorts below true.
+// The parentheses are required — `featured==true desc` is a parse error, and a
+// parse error here returns nothing at all, which the page renders as its empty
+// state rather than as a failure.
+//
+// [0..2] is inclusive on both ends — exactly 3 documents, which is
+// the whole inventory in Sanity today. The section is a single row of three;
+// raise this to [0..5] when there is enough work to earn a second row back.
 //
 // defined(image.asset) mirrors COLLECTIONS_INDEX_QUERY: a tile in this grid is
 // nothing but its image, so an artwork with no upload would render as an empty
@@ -45,10 +58,10 @@ export const COLLECTIONS_INDEX_QUERY = `
 // this section on their own once an image is uploaded in Studio.
 //
 // defined(slug.current) guards the slice, which GROQ applies before Zod ever
-// runs: a slug-less draft would claim one of the six slots and then fail
-// validation, silently shrinking the grid to five.
+// runs: a slug-less draft would claim one of the three slots and then fail
+// validation, silently shrinking the grid to two.
 export const HOMEPAGE_WORKS_QUERY = `
-*[_type=="artwork"&&defined(image.asset)&&defined(slug.current)]|order(featured desc,year desc)[0..5]{
+*[_type=="artwork"&&defined(image.asset)&&defined(slug.current)]|order((featured==true) desc,year desc)[0..2]{
   title,slug,year,medium,featured,altText,
   image{asset,hotspot,crop}
 }

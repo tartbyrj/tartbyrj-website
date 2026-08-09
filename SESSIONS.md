@@ -6,6 +6,21 @@
 
 ---
 
+## Session: 2026-08-08
+
+### Bugs
+- `order(featured desc)` sorted `null` above `true` — unset `featured` toggle led the
+  section instead of trailing it. Fixed to `order((featured==true) desc, year desc)`
+  in `HOMEPAGE_WORKS_QUERY` — parens required, `featured==true desc` is a parse error
+- `.catch(() => null)` on every Sanity `client.fetch()` call turns a broken GROQ
+  query into a plausible empty state — build stays green, page just silently shows
+  the fallback/zero-state. Not fixed this session; needs `console.error` inside the
+  `catch`, site-wide, as its own standalone task (11 call sites across
+  `index.astro`, `about.astro`, `works/index.astro`, `works/[slug].astro`,
+  `collections/index.astro`, `collections/[slug].astro`)
+
+---
+
 ## Session: 2026-08-07
 
 ### Completed
