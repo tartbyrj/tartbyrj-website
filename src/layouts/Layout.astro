@@ -33,9 +33,10 @@ const navLinks = [
   { label: 'Contact', href: '/contact' },
 ];
 
-// Brand lockup, dropped into src/assets/ as `tart-logo.<ext>`. Globbed rather
-// than imported directly so a missing file falls back to the type wordmark
-// instead of failing the build; Astro optimises it on build.
+// Brand lockup, dropped into src/assets/ as `tart-logo.<ext>`. The footer is
+// its only remaining consumer — the top nav renders the wordmark as type.
+// Globbed rather than imported directly so a missing file falls back to that
+// same wordmark instead of failing the build; Astro optimises it on build.
 const logoFiles = import.meta.glob<{ default: ImageMetadata }>(
   '../assets/tart-logo.{png,jpg,jpeg,webp}',
   { eager: true }
@@ -89,21 +90,17 @@ const logo = Object.values(logoFiles)[0]?.default;
     <div class="cursor-ring" id="cursor-ring"></div>
 
     <nav id="nav">
-      <!-- loading="eager": the logo is above the fold on every page, so Astro's
-           lazy default would flash a gap in the nav on first paint. -->
-      <a href="/" class="nav-logo" aria-label="T.Art by RJ — home">
-        {logo ? (
-          <Image
-            class="nav-logo-img"
-            src={logo}
-            alt="T.Art by RJ"
-            width={120}
-            densities={[1, 2]}
-            loading="eager"
-          />
-        ) : (
-          <span class="nav-logo-text">T.Art by RJ</span>
-        )}
+      <!-- Type wordmark, not an image: it needs no request, is sharp at every
+           density, recolours itself with the theme, and is real selectable text
+           for search engines. The case is set here in the markup, character by
+           character — see .nav-logo-text's text-transform. -->
+      <!-- No aria-label: the accessible name comes from the visible text of the
+           two spans, which is exactly what WCAG 2.5.3 (Label in Name) asks for
+           — a speech-input user saying either line matches, and both lines get
+           announced. A label here would replace that text wholesale. -->
+      <a href="/" class="nav-logo">
+        <span class="nav-logo-text">T.ART by RJ</span>
+        <span class="nav-logo-tagline">WHERE TASTE & ART BLENDS</span>
       </a>
       <div class="nav-right">
         <div class="nav-links">
@@ -137,12 +134,12 @@ const logo = Object.values(logoFiles)[0]?.default;
           <Image
             class="footer-logo-img"
             src={logo}
-            alt="T.Art by RJ — Where Taste & Art Blends"
+            alt="T.ART by RJ — Where Taste & Art Blends"
             width={320}
             densities={[1, 2]}
           />
         ) : (
-          <span class="footer-logo-text">T.Art by RJ</span>
+          <span class="footer-logo-text">T.ART by RJ</span>
         )}
       </div>
       <div class="footer-links">
@@ -307,13 +304,15 @@ const logo = Object.values(logoFiles)[0]?.default;
     }
   }
 
-  /* --logo-h drives nav height, and nav height is a budget, not a free choice:
-     every other page hardcodes a top offset to clear this fixed bar (140px on
-     /works and /collections, 150px /about, 160px /contact, 120px mobile). At
-     64 + 2×18 the bar is 100px, leaving 40-60px of breathing room. Push the
-     logo much past this and page headings start tucking under the nav.
-     That 100px is published as --nav-h in tokens.css for things that offset
-     against it — change --logo-h or this padding and --nav-h must follow.
+  /* --logo-h no longer sizes anything visible — the wordmark is 22px of type —
+     but it still sets the nav's height, so it stays. Nav height is a budget,
+     not a free choice: every other page hardcodes a top offset to clear this
+     fixed bar (140px on /works and /collections, 150px /about, 160px /contact,
+     120px mobile), and it is published as --nav-h in tokens.css for everything
+     that offsets against it. At 64 + 2×18 the bar is 100px. Letting the bar
+     collapse to the height of the type would leave every one of those offsets
+     over-reserving by 40px, so .nav-logo holds the old height open instead.
+     Change --logo-h or this padding and --nav-h must follow.
      The 900px block below drops --logo-h to 44px for an 80px bar; tokens.css
      overrides --nav-h at the same breakpoint to match. */
   #nav {
@@ -338,32 +337,60 @@ const logo = Object.values(logoFiles)[0]?.default;
     border-bottom: 1px solid var(--border);
   }
 
-  /* flex, not inline — kills the baseline gap under the logo image so the
-     lockup sits optically centred against the nav links. */
+  /* A two-line lockup: wordmark over tagline, stacked in a column.
+     align-items: flex-start keeps both lines on the same left edge, which is
+     the alignment the eye actually reads. The column's width is whichever line
+     is wider — that is what .nav-logo-tagline's justify trick depends on, so
+     the wordmark has to stay the wider of the two.
+     min-height carries the bar: it is the only thing left holding the nav to
+     the --logo-h budget now that no image does, and --nav-h depends on it. */
   .nav-logo {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: var(--logo-h);
     min-width: 0;
     text-decoration: none;
   }
 
   .nav-logo-text {
     font-family: var(--font-serif);
-    font-size: 17px;
+    font-size: 22px;
     font-weight: 400;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
+    line-height: 1;
     color: var(--text-primary);
+    /* Explicit, not inherited-by-luck. The wordmark's case is mixed on purpose
+       — caps through T.ART, lowercase "by" — so it has to come from the markup
+       and survive intact. Both .nav-links a and .footer-links a in this same
+       stylesheet uppercase their text; nothing in the current ancestor chain
+       reaches this, and this rule is what keeps that true if one ever does. */
+    text-transform: none;
   }
 
-  /* Height-driven: the lockup is wide and short, so height is what has to stay
-     consistent with the nav links. Width follows the source aspect ratio, and
-     min-width: 0 on the flex parent lets it shrink rather than shove the links
-     off-screen at awkward tablet widths. */
-  .nav-logo-img {
-    height: var(--logo-h);
-    width: auto;
-    max-width: 100%;
-    display: block;
+  /* The tagline is set to the exact width of the wordmark above it, so the
+     lockup reads as one block with two flush edges rather than two loose lines.
+     align-self: stretch takes the column's full width, which is the wordmark's;
+     text-align-last then justifies what is a single line — the last line is
+     also the only line — spreading the four word gaps to close the remainder.
+     This only works while the tagline's *natural* width stays under the
+     wordmark's: overshoot and the tagline sets the column width instead, the
+     justify goes slack and the wordmark stops defining the edge. font-size and
+     letter-spacing here are tuned to land just short; they are the two knobs to
+     turn if the wordmark is ever resized. */
+  .nav-logo-tagline {
+    align-self: stretch;
+    margin-top: 5px;
+    font-family: var(--font-sans);
+    font-size: 8px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    color: var(--text-secondary);
+    text-transform: none;
+    text-align: justify;
+    text-align-last: justify;
   }
 
   .nav-right {
@@ -379,7 +406,7 @@ const logo = Object.values(logoFiles)[0]?.default;
   }
 
   .nav-links a {
-    font-size: 10px;
+    font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-secondary);
@@ -475,10 +502,11 @@ const logo = Object.values(logoFiles)[0]?.default;
   }
 
   /* The footer is where the lockup is finally allowed to be legible. The nav
-     caps out around 64px because nav height is a shared budget; nothing here
-     competes for vertical space, so the tagline gets enough height to resolve.
-     Tagline cap height is roughly 3.8% of the file's height — 180px puts it
-     near 7px, which is the point it stops being texture. Tune --footer-logo-h. */
+     carries the wordmark as type because nav height is a shared budget;
+     nothing here competes for vertical space, so the tagline gets enough
+     height to resolve. Tagline cap height is roughly 3.8% of the file's
+     height — 180px puts it near 7px, which is the point it stops being
+     texture. Tune --footer-logo-h. */
   footer {
     --footer-logo-h: 180px;
     padding: 40px 52px;
@@ -497,12 +525,23 @@ const logo = Object.values(logoFiles)[0]?.default;
     min-width: 0;
   }
 
+  /* Fallback only — shown if the lockup file is ever missing from src/assets.
+     Same wordmark as the nav, one step down; see .nav-logo-text for why
+     text-transform is spelled out rather than left to inheritance. */
   .footer-logo-text {
     font-family: var(--font-serif);
     font-size: 18px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: 1;
     color: var(--text-primary);
+    text-transform: none;
   }
 
+  /* Height-driven: the lockup is wide and short, so height is what has to stay
+     consistent. Width follows the source aspect ratio, and min-width: 0 on the
+     flex parent lets it shrink rather than shove the footer links off-screen at
+     awkward widths. */
   .footer-logo-img {
     height: var(--footer-logo-h);
     width: auto;
@@ -526,7 +565,7 @@ const logo = Object.values(logoFiles)[0]?.default;
   }
 
   .footer-links a {
-    font-size: 10px;
+    font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-secondary);
