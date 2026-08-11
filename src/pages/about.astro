@@ -1,9 +1,11 @@
 ---
-import { Image } from 'astro:assets';
+import { Image, getImage } from 'astro:assets';
 import { z } from 'zod';
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { ABOUT_QUERY } from '../lib/sanity/queries';
+import backdropSource from '../assets/about/about page background.png';
+import artistCutout from '../assets/about/artist-cutout.png';
 
 const AboutSchema = z.object({
   biography: z.unknown().nullish(),
@@ -15,7 +17,7 @@ const raw = await client.fetch(ABOUT_QUERY).catch(() => null);
 const result = AboutSchema.safeParse(raw);
 const about = result.success ? result.data : undefined;
 
-// The artist's own words, from the Worlds Within Walls archive. Sanity
+// The artist's own words, from the Worlds Within Walls archive plate. Sanity
 // overrides these once an aboutPage singleton is published.
 const FALLBACK_BIO = [
   'Through murals, drawing and public art, I explore the stories carried by people, places and living beings.',
@@ -48,18 +50,30 @@ function toParagraphs(value: unknown): string[] {
 
 const paragraphs = toParagraphs(about?.biography);
 
-// The statement is read as a litany — one word per line. Splitting on the
+// The statement is read as a litany — one phrase per line. Splitting on the
 // sentence break keeps that working for whatever the artist writes later.
 const statementWords = (about?.statement ?? FALLBACK_STATEMENT)
   .split('.')
   .map((word) => word.trim())
   .filter(Boolean);
 
-// Portrait sources, in order:
-//   1. the Sanity `aboutPage` singleton, sized through urlFor()
+const availableFor = ['Private commissions', 'Painting workshops', 'Studio visits'];
+
+// ─── PORTRAIT ──────────────────────────────────────────────────────────────
+// Three sources, in order:
+//   1. the Sanity `aboutPage` singleton's `portrait` field — the production
+//      one, so the artist can change the photo without touching the repo
 //   2. a local file dropped into src/assets/artist/ as `me.<ext>` — see the
-//      README there. Globbed rather than imported directly so the file is
+//      README there. Globbed rather than imported directly so it stays
 //      optional; Astro optimises it on build.
+//   3. artist-cutout.png — the shipped default, and the one the composition is
+//      actually drawn around.
+//
+// Only (3) is a real cutout — background removed, transparent, standing free
+// on the art. A photo published to Sanity or dropped in the assets folder is
+// an ordinary rectangular photo with its own background, and standing one of
+// those free on the collage looks like a mistake rather than a choice, so
+// those two get a framed treatment instead (see .portrait.is-framed).
 const localPortraits = import.meta.glob<{ default: ImageMetadata }>(
   '../assets/artist/me.{jpg,jpeg,png,webp}',
   { eager: true }
@@ -70,234 +84,288 @@ const sanityPortraitUrl = about?.portrait
   ? urlFor(about.portrait).width(900).format('webp').quality(85).url()
   : undefined;
 
-const hasPortrait = Boolean(sanityPortraitUrl || localPortrait);
+const hasSuppliedPortrait = Boolean(sanityPortraitUrl || localPortrait);
 
-// Nothing to show yet: mark where the photo lands while developing, but never
-// ship a "drop your photo here" frame to visitors.
-const showPortraitPlaceholder = !hasPortrait && import.meta.env.DEV;
-
-const availableFor = ['Private commissions', 'Painting workshops', 'Studio visits'];
+// ─── BACKDROP ──────────────────────────────────────────────────────────────
+// The page's own background art, exported clean — paper, ink washes, the
+// skyline sketch, the taped T.ART card, the notebook and brushes, and nothing
+// else. No text and no figure baked in, which is what lets everything on this
+// page be real HTML over it instead of hidden behind opaque cards.
+//
+// Rendered through getImage() rather than referenced from CSS by path: a CSS
+// url() is a string Astro's image pipeline never sees, so the raw 6MB PNG
+// would ship as-is. This hands back an optimised, hashed WebP to interpolate
+// into the custom property below.
+const backdrop = await getImage({
+  src: backdropSource,
+  format: 'webp',
+  quality: 76,
+  width: 2560,
+});
 ---
 
 <Layout
   title="About"
   description="Rupjyoti Baruah — artist, muralist and storyteller working between Dubai and Assam, India."
 >
-  <article class:list={['about', !hasPortrait && !showPortraitPlaceholder && 'about-solo']}>
-    {sanityPortraitUrl ? (
-      <figure class="portrait">
-        <img src={sanityPortraitUrl} alt="Rupjyoti Baruah in the studio" loading="eager" />
-      </figure>
-    ) : localPortrait ? (
-      <figure class="portrait">
-        <Image
-          src={localPortrait}
-          alt="Rupjyoti Baruah in the studio"
-          widths={[600, 900, 1200]}
-          sizes="(max-width: 900px) 100vw, 45vw"
-          format="webp"
-          quality={85}
-          loading="eager"
-        />
-      </figure>
-    ) : null}
-
-    {showPortraitPlaceholder && (
-      <div class="portrait portrait-slot">
-        <p class="portrait-slot-title">Artist portrait</p>
-        <p class="portrait-slot-hint">
-          Drop <code>me.jpg</code> or <code>me.png</code> into
-          <br />
-          <code>src/assets/artist/</code>
-        </p>
-        <p class="portrait-slot-note">Dev only — hidden in the built site</p>
-      </div>
-    )}
-
-    <div class="statement">
-      <header class="archive-head reveal">
-        <a class="archive-collection" href="/collections/worlds-within-walls">
-          Worlds Within Walls
-        </a>
-        <span class="archive-divider" aria-hidden="true"></span>
-        <span class="archive-kind">Archive Collection</span>
-      </header>
-
-      <h1 class="title reveal">
-        <span class="title-lead">The World</span>
-        <span class="title-sub">Behind the Work</span>
-      </h1>
-
-      <div class="title-rule reveal" aria-hidden="true"></div>
-
-      <p class="litany">
-        {statementWords.map((word, i) => (
-          <span class="litany-word reveal" style={`transition-delay: ${i * 220}ms`}>
-            {word}.
-          </span>
-        ))}
-      </p>
-
-      <div class="prose reveal">
-        {paragraphs.map((text) => (
-          <p>{text}</p>
-        ))}
+  {/* Quoted url(): the asset's filename has spaces in it, and while Astro
+      percent-encodes them on the way out, quoting means the declaration stays
+      valid CSS even if a future filename arrives at this line unencoded. */}
+  <div class="about" style={`--backdrop:url('${backdrop.src}')`}>
+    {/* ─── 1. The world behind the work ─── */}
+    <section class="intro">
+      {/* Scoped to this section only, not the whole page — the art belongs to
+          the intro, not to "Available for" below it. Scrolls with the section
+          rather than sitting fixed behind it: a background pinned only across
+          part of the page (fixed, then effectively unpinning once the section
+          it belongs to scrolls past) is the confusing case, not the simple
+          one, so this is ordinary in-flow art sized to its section. */}
+      {/* backdrop-clip is exactly .intro's own size and clips only its one
+          child — not .intro itself, which must stay unclipped because the
+          portrait's own transform (--portrait-nudge-x) can carry it close to
+          .intro's edge, and clipping .intro would risk cutting that off too. */}
+      <div class="backdrop-clip" aria-hidden="true">
+        <div class="backdrop"></div>
       </div>
 
-      <footer class="colophon reveal">
-        <p class="signature">Rupjyoti Baruah</p>
-        <p class="role">Artist | Muralist | Storyteller</p>
-        <span class="colophon-rule" aria-hidden="true"></span>
-        <p class="location">
-          Dubai • Assam<br />India
-        </p>
-      </footer>
+      <figure class:list={['portrait', hasSuppliedPortrait ? 'is-framed' : 'is-cutout']}>
+        {sanityPortraitUrl ? (
+          <img src={sanityPortraitUrl} alt="Rupjyoti Baruah in the studio" loading="eager" />
+        ) : localPortrait ? (
+          <Image
+            src={localPortrait}
+            alt="Rupjyoti Baruah in the studio"
+            widths={[450, 700, 900]}
+            sizes="(min-width: 900px) 40vw, 80vw"
+            format="webp"
+            quality={85}
+            loading="eager"
+          />
+        ) : (
+          <Image
+            src={artistCutout}
+            alt="Rupjyoti Baruah, arms folded, in a linen shirt"
+            widths={[450, 700, 900]}
+            sizes="(min-width: 900px) 40vw, 80vw"
+            format="webp"
+            quality={88}
+            loading="eager"
+          />
+        )}
+      </figure>
 
-      <section class="available reveal">
-        <h2 class="label">Available for</h2>
-        <ul>
-          {availableFor.map((item) => (
-            <li>{item}</li>
+      <div class="copy">
+        <h1 class="title reveal">
+          <span class="title-lead">The World</span>
+          <span class="title-sub">Behind the Work</span>
+        </h1>
+
+        <div class="title-rule reveal" aria-hidden="true"></div>
+
+        <p class="litany">
+          {statementWords.map((word, i) => (
+            <span class="litany-word reveal" style={`transition-delay: ${i * 220}ms`}>
+              {word}.
+            </span>
           ))}
-        </ul>
-      </section>
-    </div>
-  </article>
+        </p>
+
+        <div class="prose reveal">
+          {paragraphs.map((text) => (
+            <p>{text}</p>
+          ))}
+        </div>
+
+        <footer class="colophon reveal">
+          <p class="signature">Rupjyoti Baruah</p>
+          <p class="role">Artist | Muralist | Storyteller</p>
+          <span class="colophon-rule" aria-hidden="true"></span>
+          <p class="location">Dubai · UAE<br />Assam · India</p>
+        </footer>
+      </div>
+    </section>
+
+    {/* ─── 2. Available for ─── */}
+    {/* No background art — flat var(--bg-elevated), same token the homepage
+        uses for its one tonal break (see ARCHITECTURE.md §17). The head/label
+        pair below is the same border-top + eyebrow pattern as .rw-head/
+        .rw-label in index.astro (Recent Works) and .c-head/.c-head-label
+        (Collections), reused rather than restyled. */}
+    <section class="available">
+      <div class="available-head">
+        <h2 class="available-label reveal">Available for</h2>
+      </div>
+
+      <ul class="available-list">
+        {availableFor.map((item, i) => (
+          <li class="reveal" style={`transition-delay: ${i * 100}ms`}>
+            <span class="available-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+            <span class="available-item">{item}</span>
+          </li>
+        ))}
+      </ul>
+      <a class="available-cta reveal" href="/contact">Start a conversation</a>
+    </section>
+  </div>
 </Layout>
 
 <style>
+  /* ── Page shell ────────────────────────────────────────────────────────
+     Just the scrim token both themes resolve against — the art itself is
+     scoped to .intro below, not painted at the page level. */
   .about {
-    display: grid;
-    grid-template-columns: 0.85fr 1fr;
-    gap: 72px;
-    align-items: start;
-    padding: 150px 52px var(--space-section);
-    background: var(--bg-primary);
+    /* Softens the art under the copy. Light theme barely touches it — the
+       paper is already pale and the text is dark — but the collage has ink
+       washes dark enough to swallow a line of body copy where they land, and
+       this keeps that from depending on exactly where the crop falls at a
+       given viewport size. */
+    --scrim: rgb(250 247 244 / 0.42);
+  }
+
+  /* ── 1. Intro ──────────────────────────────────────────────────────────
+     Mobile-first: one column, portrait above the copy. min-height rather
+     than height so a long Sanity biography grows the section instead of
+     spilling out of it — the previous build of this page was pinned to the
+     art's own aspect ratio and overflowed for exactly that reason. */
+  .intro {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    min-height: 100svh;
+    padding: calc(var(--nav-h) + 24px) 24px var(--space-section-m);
+  }
+
+  .backdrop-clip {
+    position: absolute;
+    /* .intro is this element's containing block (it's position:relative
+       above), so inset:0 covers exactly this section's own box, no more —
+       that's what keeps the art from bleeding into "Available for" below. */
+    inset: 0;
+    /* Negative, not 0: a positioned element at z-index 0 paints AFTER
+       ordinary in-flow content in the same stacking context, not before it —
+       so at 0 this would sit on top of .intro's own children (the portrait,
+       the copy), which are normal, non-positioned elements. Negative puts it
+       in the layer that paints before in-flow content instead, which is what
+       "behind everything in this section" actually requires. */
+    z-index: -1;
+    /* Clips .backdrop below, and only .backdrop — this element carries no
+       size of its own beyond .intro's, so nothing about .intro's other
+       children is affected by hiding overflow here. */
+    overflow: hidden;
+  }
+
+  /* Deliberately taller than its own box (.backdrop-clip, which is exactly
+     .intro's size) and centred over it via the negative top offset — the
+     spare 18% top and bottom is what the script at the bottom of the page
+     has room to translate through for the parallax, without ever scrolling
+     a blank edge into view. Panning background-position within a box sized
+     to cover was tried first and dropped: this photo's aspect ratio happens
+     to sit close to the section's own, so cover left almost no crop margin
+     for a position shift to move through — visible only as a barely
+     perceptible flicker. Translating an oversized layer gets a guaranteed
+     amount of real travel out of the same 18%, regardless of how the photo's
+     and the section's aspect ratios happen to relate at a given viewport
+     size. 18%, not a rounder 15%: the script's RANGE is a percentage of
+     THIS element's own (oversized) height, not of .intro's, so its actual
+     travel across .intro is RANGE × (this height ÷ 100) — see the script
+     comment for the exact figure. 18 is that figure plus a real margin, not
+     the figure itself. */
+  .backdrop {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -18%;
+    height: 136%;
+    background-image: var(--backdrop);
+    background-size: cover;
+    background-position: center;
+    /* Paints the scrim over the art without a second element or a gradient
+       stack — one layer, one repaint, and it inherits whatever --scrim
+       resolves to for the active theme. Sized to this element's own
+       (oversized) box, same as everything else here — the box is what
+       moves, not what's painted on it. */
+    box-shadow: inset 0 0 0 100vmax var(--scrim);
+    /* Set by the script at the bottom of the page as the section scrolls —
+       the parallax itself. Declared here only as the resting value, which is
+       what stays in effect under prefers-reduced-motion, when the script
+       never touches this element at all. */
+    transform: translateY(0%);
+    will-change: transform;
   }
 
   /* ── Portrait ─────────────────────────────────────────── */
 
   .portrait {
-    position: sticky;
-    top: 110px;
     margin: 0;
+    display: flex;
+    justify-content: center;
   }
 
   .portrait :global(img) {
     display: block;
+  }
+
+  /* The shipped cutout: no frame, no background, no border — it stands
+     directly on the collage, which is the whole point of keying it out.
+     The source photo is cropped at his shins, so object-position pins him to
+     the bottom of his box: whatever room is spare goes above his head, and
+     the crop is never scaled away from the box's own bottom edge. (Where that
+     bottom edge sits is a separate question — see --portrait-lift in the
+     desktop block, which raises the whole box off the floor of the view.) */
+  .is-cutout :global(img) {
+    width: auto;
+    max-width: 100%;
+    max-height: 52svh;
+    object-fit: contain;
+    object-position: bottom;
+    /* Grounds him on the paper. Without it a hard-edged cutout reads as
+       pasted on rather than standing in the scene. */
+    filter: drop-shadow(0 24px 34px rgb(26 20 18 / 0.22));
+  }
+
+  /* A Sanity or local photo is not a cutout — it keeps its own background, so
+     it gets a deliberate frame instead of being stood free on the art where
+     its rectangle would read as an accident. */
+  .is-framed :global(img) {
     width: 100%;
+    max-width: 420px;
     aspect-ratio: 4 / 5;
     object-fit: cover;
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 18px 46px rgb(26 20 18 / 0.18);
   }
 
-  /* No portrait published yet — a blank placeholder box would just be a hole,
-     so the statement carries the page on its own instead. */
-  .about-solo {
-    grid-template-columns: minmax(0, 620px);
-    justify-content: center;
-  }
+  /* ── Copy ─────────────────────────────────────────────── */
 
-  /* Dev-only slot marking where the photo lands. */
-  .portrait-slot {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    aspect-ratio: 4 / 5;
-    padding: 24px;
-    text-align: center;
-    border: 1px dashed var(--border-strong);
-    background: var(--bg-secondary);
-  }
-
-  .portrait-slot-title {
-    font-family: var(--font-serif);
-    font-size: 21px;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .portrait-slot-hint {
-    font-size: 12px;
-    line-height: 1.9;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-
-  .portrait-slot code {
-    font-family: var(--font-sans);
-    letter-spacing: 0.03em;
-    color: var(--accent);
-  }
-
-  .portrait-slot-note {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-muted);
-    margin: 6px 0 0;
-  }
-
-  /* ── Archive header ───────────────────────────────────── */
-
-  /* One measure for the whole column, so the rules end where the prose does
-     instead of running past it. */
-  .statement {
+  .copy {
     max-width: 620px;
   }
-
-  .archive-head {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-  }
-
-  .archive-collection {
-    color: var(--text-secondary);
-    text-decoration: none;
-    transition: color var(--dur-base) ease;
-  }
-
-  .archive-collection:hover {
-    color: var(--accent);
-  }
-
-  .archive-divider {
-    width: 1px;
-    height: 22px;
-    background: var(--border-strong);
-  }
-
-  .archive-kind {
-    color: var(--text-muted);
-  }
-
-  /* ── Display title ────────────────────────────────────── */
 
   .title {
     font-family: var(--font-serif);
     font-weight: 300;
     text-transform: uppercase;
     color: var(--text-primary);
-    margin: 34px 0 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
   .title-lead {
-    font-size: clamp(30px, 5.4vw, 60px);
-    letter-spacing: 0.17em;
+    /* Bigger ceiling, slightly tighter tracking than before — wide letter-
+       spacing that reads as elegant at 62px starts to look merely loose once
+       the type is confident enough to fill more of the section, so this
+       trims tracking a touch as it gains size. */
+    font-size: clamp(34px, 5.6vw, 74px);
+    letter-spacing: 0.14em;
     line-height: 1;
   }
 
   .title-sub {
-    font-size: clamp(19px, 3.2vw, 35px);
-    letter-spacing: 0.21em;
+    font-size: clamp(20px, 3.4vw, 39px);
+    letter-spacing: 0.19em;
     line-height: 1;
     color: var(--text-secondary);
   }
@@ -305,31 +373,37 @@ const availableFor = ['Private commissions', 'Painting workshops', 'Studio visit
   .title-rule {
     height: 1px;
     background: var(--border-strong);
-    margin: 30px 0 40px;
+    margin: 28px 0 38px;
   }
 
-  /* ── Litany — the signature moment ────────────────────── */
-
+  /* Reference art sets this in a handwriting face. Project convention is two
+     self-hosted families only (see CLAUDE.md) — italic Cormorant Garamond is
+     the closest stand-in without pulling in a third, unvetted webfont. */
   .litany {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin: 0 0 46px;
+    /* Was 4px — three short display lines read as one cramped paragraph at
+       that gap; this is closer to how the reference sets the same lines. */
+    gap: 8px;
+    margin: 0 0 44px;
   }
 
   .litany-word {
     font-family: var(--font-serif);
     font-style: italic;
-    font-size: clamp(22px, 2.7vw, 31px);
-    line-height: 1.45;
+    font-size: clamp(23px, 2.8vw, 34px);
+    line-height: 1.5;
     color: var(--accent);
   }
 
-  /* ── Body copy ────────────────────────────────────────── */
-
+  /* Explicit rather than inheriting body's plain 16px: this is the page's
+     one long-form reading passage, so it earns a size a step above ordinary
+     UI copy. Still well inside the 65–75 character measure guideline at
+     .copy's 620px max-width — bigger type, not longer lines. */
   .prose p {
+    font-size: clamp(16px, 1.05vw, 18px);
     color: var(--text-secondary);
-    line-height: 1.9;
+    line-height: 1.85;
     margin: 0 0 22px;
   }
 
@@ -340,22 +414,27 @@ const availableFor = ['Private commissions', 'Painting workshops', 'Studio visit
   /* ── Colophon ─────────────────────────────────────────── */
 
   .colophon {
-    margin-top: 52px;
+    margin-top: 48px;
   }
 
+  /* Same font-family note as .litany above. */
   .signature {
     font-family: var(--font-serif);
     font-style: italic;
-    font-size: 27px;
+    font-size: 29px;
     color: var(--text-primary);
     margin: 0;
   }
 
+  /* 10px, one step below what most guidelines treat as a body-text floor —
+     defensible on a genuine caption, but this pair reads more like a
+     secondary line of the signature itself. 11px keeps the small-caps
+     eyebrow feel without sitting right at that floor. */
   .role,
   .location {
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.14em;
     margin: 0;
   }
 
@@ -374,66 +453,288 @@ const availableFor = ['Private commissions', 'Painting workshops', 'Studio visit
     width: 44px;
     height: 1px;
     background: var(--accent-dim);
-    margin: 26px 0;
+    margin: 22px 0;
   }
 
-  /* ── Available for ────────────────────────────────────── */
-
+  /* ── 2. Available for ──────────────────────────────────────────────────
+     Its own full-height view rather than a block appended to the intro: the
+     scroll from one to the other is the transition, and the list only earns
+     type this size if it has the room to be the only thing being read.
+     Flat var(--bg-elevated), no background art — the same token the homepage
+     uses for its one tonal break (see ARCHITECTURE.md §17: "The Artist
+     section... using var(--bg-elevated)"). Both themes' values already come
+     from tokens.css, so nothing theme-specific needs setting here. */
   .available {
-    margin-top: 56px;
-    padding-top: 26px;
-    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100svh;
+    padding: var(--space-section-m) 24px;
   }
 
-  .label {
+  /* Same shape as .rw-head / .c-head in index.astro (Recent Works,
+     Collections) — border-top + padding-top is the separator itself, not a
+     decoration on top of one. */
+  .available-head {
+    border-top: 1px solid var(--border-strong);
+    padding-top: 22px;
+    margin-bottom: 32px;
+  }
+
+  /* Same as .rw-label (Recent Works) except font-size — this page's own
+     +2px, kept here rather than folded into a shared class since this class
+     is already unique to about.astro (Astro scopes each component's <style>
+     block independently; index.astro's equivalent is the differently-named
+     .rw-label). letter-spacing stays in em, so 0.22em now resolves to more
+     physical tracking at the bigger size but the SAME ratio to the type —
+     that's what "keep the ratio" means for an em value, not leaving the
+     number untouched. */
+  .available-label {
+    margin: 0;
     font-family: var(--font-sans);
     font-weight: 400;
-    font-size: 10px;
+    font-size: 13px;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
     color: var(--text-secondary);
+  }
+
+  .available-list {
+    list-style: none;
+    padding: 0;
     margin: 0;
   }
 
-  .available ul {
-    list-style: none;
-    padding: 0;
-    margin: 14px 0 0;
+  .available-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 16px 0;
+    border-top: 1px solid var(--border);
   }
 
-  .available li {
-    color: var(--text-secondary);
-    line-height: 2.1;
+  .available-list li:last-child {
+    border-bottom: 1px solid var(--border);
   }
 
-  .available li::before {
-    content: '—';
+  .available-index {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.14em;
     color: var(--text-muted);
-    margin-right: 12px;
+    /* Holds its column so the items line up on one left edge regardless of
+       how wide the numerals render. */
+    flex: 0 0 auto;
+    min-width: 28px;
   }
 
-  /* The staggered litany is the one deliberate motion on this page —
-     honour a reduced-motion preference by showing it at once. */
+  /* The size is the point of this section — the same three lines that were a
+     footnote under the biography, read at display scale. Pushed a further
+     step past the original ceiling, with tracking gone slightly negative
+     rather than the usual positive letter-spacing of the smaller type on
+     this page — that's what keeps very large serif from reading as merely
+     "bigger body text" instead of a deliberate display size. */
+  .available-item {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(32px, 7.3vw, 88px);
+    line-height: 1.12;
+    letter-spacing: -0.005em;
+    color: var(--text-primary);
+  }
+
+  .available-cta {
+    align-self: flex-start;
+    margin-top: 44px;
+    /* +2px, same reasoning as .available-label above — this class is unique
+       to about.astro already, so no shared homepage class is at risk. */
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    border-bottom: 1px solid var(--accent-dim);
+    padding-bottom: 4px;
+    transition: border-color var(--dur-base) ease;
+  }
+
+  .available-cta:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  /* ── Dark theme ────────────────────────────────────────────────────────
+     The art is a fixed photograph of pale paper — it has no dark version to
+     switch to. Rather than pin this page to light colours in both themes
+     (which leaves the site's own nav and footer in dark dress against a
+     glaring light page), the scrim goes heavy and dark: the collage stays
+     legible as texture underneath, and every ordinary dark-theme token on
+     top of it lands on a dark ground and reads normally.
+     :global() on the attribute selector only — Astro's scoping transform
+     otherwise appends this component's scope attribute to every simple
+     selector, including [data-theme='dark'], which lives on <html>. Left
+     unguarded it compiles to a selector that can never match. */
+  :global([data-theme='dark']) .about {
+    --scrim: rgb(8 7 6 / 0.88);
+  }
+
+  /* The photo was lit against white, so on the dark ground it reads a stop
+     too bright and too warm next to everything around it. */
+  :global([data-theme='dark']) .is-cutout :global(img) {
+    filter: brightness(0.86) saturate(0.92) drop-shadow(0 24px 34px rgb(0 0 0 / 0.5));
+  }
+
+  :global([data-theme='dark']) .is-framed :global(img) {
+    filter: brightness(0.9) saturate(0.95);
+  }
+
+  /* ── Desktop ───────────────────────────────────────────────────────────
+     Two columns: the artist on the left, the copy on the right, which is the
+     composition the background art is drawn for — its open paper falls on the
+     right, its ink washes on the left, where a photograph covers them. */
+  @media (min-width: 900px) {
+    /* The three numbers that place the pair. Grouped here rather than buried
+       in the rules below because they are the knobs worth turning — each one
+       moves the composition on its own without touching the others.
+         --portrait-col  how much of the row the photo's column claims. He is
+                         right-aligned inside it, so a SMALLER number moves
+                         him right, toward the centre, and pulls the copy left
+                         behind him.
+         --column-gap    the air between them. Tighter also reads as both
+                         moving inward.
+         --portrait-lift how far he rises off the floor of the view, as a
+                         share of his own height.
+         --portrait-nudge-x  a horizontal shift on top of all that, negative
+                         for left.
+         --copy-nudge-x  the same for the text block.
+       The last two are separate from --portrait-col on purpose: the column
+       width moves photo and copy in opposite directions at once, so it can't
+       walk one of them anywhere without dragging the other back. These slide
+       one and leave the other alone. */
+    .intro {
+      --portrait-col: 36%;
+      --column-gap: clamp(24px, 3vw, 56px);
+      --portrait-lift: 20%;
+      --portrait-nudge-x: -70%;
+      --copy-nudge-x: -25%;
+
+      flex-direction: row;
+      align-items: stretch;
+      gap: var(--column-gap);
+      padding: calc(var(--nav-h) + 32px) clamp(40px, 6vw, 96px) 0;
+    }
+
+    .portrait {
+      flex: 1 1 var(--portrait-col);
+      align-items: flex-end;
+      /* Right-aligned in its column, so he sits against the centre line
+         rather than against the page's left margin. */
+      justify-content: flex-end;
+      min-width: 0;
+    }
+
+    .is-cutout :global(img) {
+      max-height: calc(100svh - var(--nav-h) - 32px);
+      /* Lifted off the bottom edge. The source photo is cropped mid-shin, so
+         raising him does expose that crop as a cut rather than hiding it at
+         the floor of the view — a real trade, made deliberately. Set
+         --portrait-lift to 0% to put him back on the floor. */
+      transform: translate(var(--portrait-nudge-x), calc(-1 * var(--portrait-lift)));
+    }
+
+    .is-framed :global(img) {
+      align-self: center;
+      max-width: 100%;
+    }
+
+    .copy {
+      flex: 1 1 calc(100% - var(--portrait-col));
+      align-self: center;
+      /* Slides the block left without changing what the column reserves, so
+         the photo beside it doesn't move in response. */
+      transform: translateX(var(--copy-nudge-x));
+      /* Clears the fixed nav's own bottom edge plus a little air, so the
+         title never starts hard against it on a short viewport. */
+      padding-bottom: var(--space-section-m);
+      min-width: 0;
+    }
+
+    .available {
+      padding: var(--space-section) clamp(40px, 6vw, 96px);
+    }
+
+    .available-list li {
+      gap: 28px;
+      padding: 26px 0;
+    }
+
+    .available-index {
+      min-width: 44px;
+    }
+  }
+
+  /* The staggered litany and list are the only deliberate motion on this
+     page — honour a reduced-motion preference by showing them at once. */
   @media (prefers-reduced-motion: reduce) {
-    .litany-word {
+    .litany-word,
+    .available-list li {
       transition: none !important;
       transition-delay: 0s !important;
     }
   }
-
-  @media (max-width: 900px) {
-    .about {
-      grid-template-columns: 1fr;
-      gap: 42px;
-      padding: 120px 24px var(--space-section-m);
-    }
-
-    .portrait {
-      position: static;
-    }
-
-    .title {
-      margin-top: 28px;
-    }
-  }
 </style>
+
+<script>
+  // Parallax for .intro's backdrop: as the section scrolls through view, the
+  // art drifts against the copy instead of moving in lockstep with it — the
+  // "two sections, one feels deeper than the other" effect this page asked
+  // for. No animation library: this page's only other motion (.reveal) is a
+  // plain IntersectionObserver, and a scroll-position parallax doesn't need
+  // more than that either.
+  //
+  // Driven through a transform on .backdrop, not background-position — that
+  // was the first attempt, and it was too subtle to see: background-position
+  // only has room to move through whatever crop margin "cover" happens to
+  // leave over, and this photo's aspect ratio sits close enough to the
+  // section's own that there was almost no margin to move through at most
+  // viewport sizes. .backdrop is rendered oversized instead (see the CSS
+  // comment on it), inside a same-size clipping wrapper, so translating it
+  // gets a guaranteed amount of real travel regardless of aspect ratio.
+  const section = document.querySelector<HTMLElement>('.intro');
+  const backdrop = section?.querySelector<HTMLElement>('.backdrop');
+
+  if (section && backdrop && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // Percent, each direction, of .backdrop's OWN height (136% of the
+    // section's) — translateY(N%) is always relative to the element being
+    // moved, not its container. At 12, the actual pixel travel works out to
+    // ±16.32% of the section's own height (12% × 1.36), inside the 18%
+    // overscan .backdrop was given on each edge with a real margin (1.68
+    // points) to spare — an earlier version of this comment paired 12
+    // against 15% overscan and called that "just inside," which was wrong:
+    // 12% × 1.3 is 15.6%, already past 15. Keep this margin, not just this
+    // number, if either RANGE or the CSS height/top pair ever moves again.
+    const RANGE = 12;
+    let queued = false;
+
+    const update = () => {
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // 0 the instant the section's top reaches the bottom of the viewport,
+      // 1 the instant its bottom reaches the top — i.e. progress through the
+      // section's entire time on screen, not just the visible portion of it.
+      const progress = Math.min(1, Math.max(0, (vh - rect.top) / (rect.height + vh)));
+      const y = (progress - 0.5) * RANGE * 2;
+      backdrop.style.transform = `translateY(${y}%)`;
+      queued = false;
+    };
+
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(update);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    update();
+  }
+</script>

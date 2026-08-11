@@ -201,7 +201,7 @@ const tiles = recentWorks.map((artwork, i) => {
 });
 ---
 
-<Layout title="Home">
+<Layout title="Home" navMode="glass">
   <section class="hero-track" id="hero-track">
     <div class="hero">
       <div class="hero-frame">
@@ -377,7 +377,7 @@ const tiles = recentWorks.map((artwork, i) => {
     )}
   </section>
 
-  <section class="about-teaser">
+  <section id="artist" class="about-teaser">
     <p class="label about-label">T.Art by RJ</p>
     <h2 class="about-heading">Artist · Muralist · Storyteller</h2>
     <p class="about-body">
@@ -1342,10 +1342,16 @@ const tiles = recentWorks.map((artwork, i) => {
     color: var(--accent);
   }
 
-  /* ─── ABOUT TEASER ─── */
+  /* ─── ABOUT TEASER (a.k.a. "The Artist", ARCHITECTURE.md §17) ───
+     var(--bg-elevated), not --bg-primary: this is documented as the page's
+     one locked tonal break — simultaneous contrast, so artwork elsewhere
+     is always judged against a single constant ground — and carries no
+     border-top for the same reason the doc gives: the background change
+     *is* the separator. Was still on --bg-primary in code until this section
+     was cross-checked against that rule and found to disagree with it. */
   .about-teaser {
     padding: var(--space-section) 52px;
-    background: var(--bg-primary);
+    background: var(--bg-elevated);
     text-align: center;
   }
 
