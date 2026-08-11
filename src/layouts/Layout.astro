@@ -8,12 +8,20 @@ export interface Props {
   title: string;
   description?: string;
   ogImage?: string;
+  // 'glass' — translucent/blurred header, floats over a full-bleed hero;
+  // switches to 'solid' once the hero scrolls under it (see the script
+  // near the footer). Only the homepage hero calls for this: every other
+  // page's content starts below the header, not behind it, so 'solid' —
+  // the plain opaque bar — is the default and every other page gets it by
+  // omitting the prop, not by passing it explicitly.
+  navMode?: 'glass' | 'solid';
 }
 
 const {
   title,
   description = 'Original paintings and fine art by Rupjyoti Baruah — T.Art by RJ.',
   ogImage,
+  navMode = 'solid',
 } = Astro.props;
 
 const fontFiles = [
@@ -89,7 +97,7 @@ const logo = Object.values(logoFiles)[0]?.default;
     <div class="cursor" id="cursor"></div>
     <div class="cursor-ring" id="cursor-ring"></div>
 
-    <nav id="nav">
+    <nav id="nav" class:list={[navMode === 'glass' && 'nav-glass']}>
       <!-- Type wordmark, not an image: it needs no request, is sharp at every
            density, recolours itself with the theme, and is real selectable text
            for search engines. The case is set here in the markup, character by
@@ -152,17 +160,6 @@ const logo = Object.values(logoFiles)[0]?.default;
 
     <script is:inline>
       (function () {
-        var nav = document.getElementById('nav');
-        window.addEventListener('scroll', function () {
-          if (window.scrollY > 60) {
-            nav.classList.add('scrolled');
-          } else {
-            nav.classList.remove('scrolled');
-          }
-        });
-      })();
-
-      (function () {
         var toggle = document.getElementById('menu-toggle');
         var close = document.getElementById('menu-close');
         var menu = document.getElementById('mobile-menu');
@@ -181,6 +178,40 @@ const logo = Object.values(logoFiles)[0]?.default;
         menu.querySelectorAll('a').forEach(function (a) {
           a.addEventListener('click', closeMenu);
         });
+      })();
+
+      (function () {
+        // Glass-to-solid toggle for the homepage hero. Guarded on #nav
+        // actually carrying .nav-glass at parse time — every other page
+        // never adds that class (navMode defaults to 'solid' in
+        // Layout.astro), so this whole block is a no-op there: one property
+        // read, one comparison, nothing observed. Same shape as the .reveal
+        // observer below rather than a scroll-position pixel threshold, per
+        // project convention for anything IntersectionObserver can do
+        // instead.
+        var nav = document.getElementById('nav');
+        var hero = document.getElementById('hero-track');
+        if (!nav || !hero || !nav.classList.contains('nav-glass')) return;
+
+        // rootMargin shrinks the observing viewport by the bar's own
+        // height, so "intersecting" turns false at the exact moment the
+        // hero's bottom edge would otherwise be passing UNDER the bar, not
+        // merely leaving the visible viewport — which is the "any
+        // subsequent section's headline would pass under the header"
+        // condition the task asked for, expressed as geometry instead of a
+        // hardcoded pixel number. Read once at load, not kept in sync with
+        // resize — --nav-h only changes at the 900px breakpoint, and a
+        // hero this tall makes that single-frame slop invisible in
+        // practice.
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              nav.classList.toggle('nav-glass', entry.isIntersecting);
+            });
+          },
+          { rootMargin: -nav.offsetHeight + 'px 0px 0px 0px', threshold: 0 }
+        );
+        observer.observe(hero);
       })();
 
       (function () {
@@ -315,6 +346,18 @@ const logo = Object.values(logoFiles)[0]?.default;
      Change --logo-h or this padding and --nav-h must follow.
      The 900px block below drops --logo-h to 44px for an 80px bar; tokens.css
      overrides --nav-h at the same breakpoint to match. */
+  /* Flat, opaque header by default — same background token in both themes,
+     so it always matches whatever theme is active, pixel-identical to a
+     plain opaque bar with no partial transparency anywhere in it. This is
+     the ONLY state every page but the homepage ever renders: navMode
+     defaults to 'solid', and nothing below this rule applies without the
+     .nav-glass class, which only Layout's navMode="glass" branch adds.
+     The transition here is dead weight on every solid-only page — nothing
+     ever changes for the properties it names — but it's declared once, on
+     the base rule, rather than duplicated onto .nav-glass, so the SAME
+     values ease in when .nav-glass is added and ease back out when it's
+     removed on scroll. See the script near the footer for what drives that
+     toggle and why it's a class swap, not a direct style write. */
   #nav {
     --logo-h: 64px;
     position: fixed;
@@ -327,14 +370,41 @@ const logo = Object.values(logoFiles)[0]?.default;
     justify-content: space-between;
     gap: 24px;
     padding: 18px 52px;
-    background: transparent;
-    transition: background var(--dur-base) ease, border-color var(--dur-base) ease;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-strong);
+    transition: background-color var(--dur-base) ease,
+                backdrop-filter var(--dur-base) ease,
+                border-color var(--dur-base) ease;
   }
 
-  #nav.scrolled {
-    background: color-mix(in srgb, var(--bg-primary) 93%, transparent);
-    backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--border);
+  /* Glass state — homepage hero only. The 85% floor is the load-bearing
+     part, not the blur: compositing var(--bg-primary) at 85% UNDER
+     backdrop-filter is what keeps the bar's luminance dominated by that
+     scrim rather than by whatever painting happens to be scrolled behind
+     it at a given moment, so nav-link contrast holds regardless of the
+     artwork. The blur adds texture on top of an already-controlled
+     background, it isn't what controls contrast — a blurred but fully
+     transparent bar would still let a bright sky or dark canvas swing
+     contrast wildly depending on scroll position, which is exactly the
+     failure a "glass" header usually has.
+     color-mix(), not a hand-written rgba(): var(--bg-primary) is already
+     themed, so reading it through color-mix gets both themes for free from
+     one rule — the same pattern the footer's bleed gradient already uses
+     elsewhere in this file. No new dark-theme block, unlike the footer
+     texture tokens, because those were calibrated against a photograph
+     with no CSS-variable equivalent; this scrim is built from a token that
+     already is one.
+     border-bottom-color, not the border-bottom shorthand: the 1px width
+     stays reserved either way, so toggling this class never shifts layout
+     by a pixel — only the color (and so the visibility) of the line
+     changes.
+     No -webkit-backdrop-filter fallback omission: Safari still needs the
+     prefix for this property. */
+  #nav.nav-glass {
+    background-color: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-bottom-color: transparent;
   }
 
   /* A two-line lockup: wordmark over tagline, stacked in a column.
