@@ -62,8 +62,32 @@ html {
               color var(--dur-theme) ease;
 }
 
+/* EXPERIMENTAL — added alongside the tinted-header trial, not a locked
+   decision (see Layout.astro / tokens.css for the header work this pairs
+   with). A single 100×100 grayscale noise tile (public/images/grain.webp,
+   ~1.8KB, generated — not a stock texture), values clustered tightly around
+   neutral gray (128 ±7) and composited with `background-blend-mode:
+   overlay`. Overlay is a no-op on true neutral gray, so the tile self-limits
+   its own strength — it nudges --bg-primary very slightly lighter or darker
+   per pixel rather than tinting the page toward the tile's own color, and it
+   works unmodified in both themes without a second asset.
+   This is the one change in this pass that touches every page, including
+   every artwork-bearing section — CLAUDE.md's rule for this project is that
+   "the artist's work comes first" and animation/decoration must never
+   distract from the paintings. A grain this faint sits right at the edge of
+   that rule rather than clearly inside or outside it: it's visible in flat
+   background space (margins, section gaps) but should be doing its job by
+   being felt, not seen, on top of an actual painting. Look at it against
+   real artwork photography, not just flat sections, before deciding this
+   stays — that's a harder judgment call than the header trial and it's
+   noted here on purpose rather than left implicit.
+   Rollback: delete background-image / background-repeat /
+   background-blend-mode below, keep background-color. */
 body {
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  background-image: url('/images/grain.webp');
+  background-repeat: repeat;
+  background-blend-mode: overlay;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-weight: 300;
