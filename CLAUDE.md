@@ -57,7 +57,9 @@ Plan:        Free
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
 - `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
-- `ABOUT_QUERY` — aboutPage singleton
+- `ABOUT_QUERY` — aboutPage singleton. **Always returns `null`** — `aboutPage`
+  isn't a registered schema (see ARCHITECTURE.md §5), so no such document can
+  exist in Studio yet. The About page runs on hardcoded local content instead.
 
 ---
 
@@ -108,17 +110,43 @@ SESSIONS.md                     ← session log (read last 2 entries on start)
 ```css
 /* Light theme (:root default) */
 --bg-primary: #faf7f4      --text-primary: #1a1412
---bg-secondary: #f2ede8    --text-secondary: rgba(26,20,18,0.52)
---bg-elevated: #e8e0d8     --text-muted: rgba(26,20,18,0.28)
+--bg-secondary: #f2ede8    --text-secondary: rgba(26,20,18,0.72)
+--bg-elevated: #e8e0d8     --text-muted: rgba(26,20,18,0.62)
 --accent: #7a4f2a          --accent-dim: rgba(122,79,42,0.25)
 --border: rgba(26,20,18,0.09)
 
 /* Dark theme ([data-theme="dark"]) */
 --bg-primary: #080706      --text-primary: #f0ebe3
 --bg-secondary: #100e0d    --text-secondary: rgba(240,235,227,0.55)
+--text-muted: rgba(240,235,227,0.50)
 --accent: #c9a96e          --accent-dim: rgba(201,169,110,0.30)
 ```
+`--text-secondary` / `--text-muted` were raised from earlier values (0.52/0.28
+light) after those measured below WCAG AA 4.5:1. Don't lower them without
+re-measuring contrast against every background they sit on.
+
 Full token list in `src/styles/tokens.css`.
+
+### Footer texture (light + dark, both themes)
+The footer — and only the footer — carries a painted-plaster photographic
+background, via `--footer-texture` / `--footer-scrim` / `--footer-text` /
+`--footer-muted` in `tokens.css`. Assets: `public/images/footer-{light,dark}.{avif,webp}`.
+
+**The nav deliberately does not get this treatment.** `#nav` is
+`position: fixed` and sits over the hero and every artwork on scroll — a
+second painted surface there would permanently compete with the paintings.
+The footer is past the last artwork, so a textured band reads as "the wall
+the work is hung on" instead.
+
+If you touch footer colors or type sizes, don't reuse `--text-secondary` /
+`--text-muted` — those are calibrated for flat `--bg-primary` /
+`--bg-elevated`, and slice-average contrast checks are not sufficient on a
+photographic background (see the comments in `tokens.css` and
+`Layout.astro`'s footer block: local 16×16px window sweeps caught failures
+that whole-strip averages missed, including a link color that measured
+passing on average but failed 3.39:1 over a single gold patch). Use
+`--footer-text` / `--footer-muted`, and re-measure locally, not by average,
+if the source images or scrim values change.
 
 ### Homepage
 Composition, section order and the rationale behind each choice live in
@@ -203,8 +231,11 @@ Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
               (run `npm run build` output for current count)
 Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
 Sanity:       webhook → Cloudflare deploy hook, live
-TS errors:    0
-Build:        clean
+TS errors:    0 (last confirmed 2026-08-08; footer texture change on
+              2026-08-11 is CSS-only inside an existing <style> block —
+              re-run `npx astro check` + `npm run build` to reconfirm, not
+              yet run against that change)
+Build:        clean (see note above)
 ```
 
 ---
@@ -223,5 +254,9 @@ Phase 3 is **done** — the site is live and rebuilds automatically:
 - Contact/inquiry form — Formspree (placeholder at /contact)
 - Painting purchase — Stripe + Snipcart
 - Lesson booking — Calendly embed
-- About page — needs real Sanity `aboutPage` singleton content
+- About page — `aboutPage` schema doesn't exist in Studio yet, not just
+  unpublished; see ARCHITECTURE.md §5. Page currently runs on hardcoded
+  content in `about.astro`, not Sanity
+- Upcoming Exhibitions — homepage section 5 + dedicated `/exhibitions` page
+  (ARCHITECTURE.md §17); `exhibition` schema not yet registered either
 - Analytics — Cloudflare Web Analytics snippet in Layout.astro

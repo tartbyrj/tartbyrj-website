@@ -303,6 +303,18 @@ seo            object
 ```
 
 ### `aboutPage` (singleton)
+
+> **Not implemented.** This is a spec, not a built schema — `aboutPage` is not
+> registered in `src/sanity/schemas/index.ts` (only `artwork`, `collection`,
+> `homepage` are), so no document of this type can be created in Studio.
+> `ABOUT_QUERY` (`src/lib/sanity/queries.ts`) queries this type anyway and
+> always resolves to `null`; the About page (`src/pages/about.astro`) runs
+> entirely on its own local fallback content instead — biography paragraphs,
+> the statement, and the `availableFor` list are hardcoded there, not fetched.
+> A real `portrait` upload does work today independent of this schema, via a
+> local file drop — see `src/assets/artist/README.md`. Registering this
+> schema is Phase 2 (§12).
+
 ```
 biography      portableText
 statement      text          displayed as pull quote
@@ -512,6 +524,8 @@ https://*.pages.dev        (Cloudflare preview URLs)
 | Print-on-demand | Printful + Stripe | Medium |
 | Email newsletter | Buttondown or ConvertKit | Low |
 | Workshop registration | Custom Stripe checkout | High |
+| Upcoming Exhibitions — homepage section 5 (`id="exhibitions"`) + dedicated `/exhibitions` page | `exhibition` Sanity schema (spec'd in §5, not yet registered in Studio) | Medium |
+| Register `aboutPage` Sanity schema so About page content (biography, statement, portrait, `availableFor`) is editable from Studio instead of hardcoded in `about.astro` | Sanity Studio schema | Low |
 
 Phase 2 does not require rebuilding the site. Astro components bolt on.  
 Sanity `siteSettings` already has email field ready for Formspree routing.
@@ -574,8 +588,8 @@ All other elements inherit via CSS vars — no per-element transitions needed.
 
   /* Text */
   --text-primary:   #1a1412;
-  --text-secondary: rgba(26, 20, 18, 0.52);
-  --text-muted:     rgba(26, 20, 18, 0.28);
+  --text-secondary: rgba(26, 20, 18, 0.72);  /* raised from 0.52 — failed AA */
+  --text-muted:     rgba(26, 20, 18, 0.62);  /* raised from 0.28 — failed AA */
 
   /* Accent (warm sienna/bronze) */
   --accent:         #7a4f2a;
@@ -604,7 +618,7 @@ All other elements inherit via CSS vars — no per-element transitions needed.
   /* Text */
   --text-primary:   #f0ebe3;
   --text-secondary: rgba(240, 235, 227, 0.55);
-  --text-muted:     rgba(240, 235, 227, 0.28);
+  --text-muted:     rgba(240, 235, 227, 0.50);  /* raised from 0.28 — failed AA */
 
   /* Accent (warm gold) */
   --accent:         #c9a96e;
@@ -644,6 +658,30 @@ All other elements inherit via CSS vars — no per-element transitions needed.
 ### Rule: never use hex values in components
 Every color in every component must reference a CSS variable.
 If you find a hardcoded hex in a component, it's a bug.
+
+### Footer-only texture tokens (added 2026-08-11 — see §18)
+
+```css
+/* Light theme */
+--footer-texture: image-set(url('/images/footer-light.avif') type('image/avif'),
+                             url('/images/footer-light.webp') type('image/webp'));
+--footer-scrim:  rgba(250, 247, 244, 0.28);
+--footer-text:   rgba(26, 20, 18, 0.94);
+--footer-muted:  rgba(26, 20, 18, 0.88);
+
+/* Dark theme */
+--footer-texture: image-set(url('/images/footer-dark.avif') type('image/avif'),
+                             url('/images/footer-dark.webp') type('image/webp'));
+--footer-scrim:  rgba(8, 7, 6, 0.36);
+--footer-text:   rgba(240, 235, 227, 0.94);
+--footer-muted:  rgba(240, 235, 227, 0.90);
+```
+
+These are footer-local, not general-purpose. `--footer-text` / `--footer-muted`
+are not lighter/darker variants of `--text-secondary` / `--text-muted` for
+reuse elsewhere — they're calibrated against a photographic background where
+the worst-case pixel (a gold paint patch) fails contrast at values that pass
+comfortably on flat `--bg-primary`. Do not reference them outside `footer`.
 
 ---
 
@@ -694,16 +732,18 @@ Domain:               (confirm registrar)
 
 ### Section order (locked)
 
-> Sections 3–5 (Works, Artist, Exhibitions) are specified, not yet built.
+> Sections 1–4 are live. Section 5 (Upcoming Exhibitions) is **Phase 2** — not
+> yet built, on the homepage or as its own dedicated page (`/exhibitions`).
+> See §12.
 
-| # | Section | Anchor |
-|---|---|---|
-| 1 | Hero | `hero-track` |
-| 2 | Collections index | `id="collections"` |
-| 3 | Recent Works | `id="works"` |
-| 4 | The Artist | `id="artist"` |
-| 5 | Upcoming Exhibitions | `id="exhibitions"` |
-| 6 | Footer | in `Layout.astro` |
+| # | Section | Anchor | Status |
+|---|---|---|---|
+| 1 | Hero | `hero-track` | Live |
+| 2 | Collections index | `id="collections"` | Live |
+| 3 | Recent Works | `id="works"` | Live |
+| 4 | The Artist | `id="artist"` | Live |
+| 5 | Upcoming Exhibitions | `id="exhibitions"` | Phase 2 |
+| 6 | Footer | in `Layout.astro` | Live |
 
 ### Background rule (locked)
 
@@ -768,7 +808,81 @@ Lighthouse 98+ target.
 
 ---
 
+## 18. Header & Footer Chrome
+
+### Decision: the footer carries a photographic texture, the nav does not
+
+Both were candidates for a painted-plaster texture (RJ supplied light/dark
+JPGs for both, ~1706×210–230px, ~8:1). Only the footer shipped it.
+
+**Why the nav was rejected:** `#nav` is `position: fixed` and transparent
+until scroll, then a blurred `--bg-primary` scrim (`#nav.scrolled`). It sits
+over the hero and every artwork on the page for the entire scroll. A second
+painted surface riding over the paintings fails the project's North Star
+filter directly — it's a second artwork-like object competing with the real
+one, permanently, on every page. The nav's `#nav.scrolled` blur treatment is
+unchanged.
+
+There was also a hard contrast problem, not just a taste call: measured
+against `--text-secondary`, the *light* header strip failed AA everywhere
+along its width (2.9–3.4:1, need 4.5:1), and the *dark* strip failed
+specifically at 70–80% width (2.7:1) — which is exactly where the nav links
+and theme toggle sit at desktop widths. Even a "nav only, tinted low-opacity"
+compromise was rejected once the transparent/floating requirement was
+weighed against it: a scrim strong enough to protect contrast defeats the
+point of showing the texture at all.
+
+**Why the footer works:** it's the last thing on the page — nothing competes
+for attention — and it reads as "the wall the work is hung on" rather than a
+second painted surface.
+
+### Implementation
+
+- Assets: `public/images/footer-{light,dark}.{avif,webp}` — AVIF primary,
+  WebP fallback, no JPEG tier shipped (both formats are universal in every
+  browser this stylesheet already depends on). 22–27KB each, one request per
+  theme, below the fold.
+- Tokens: `--footer-texture`, `--footer-scrim`, `--footer-text`,
+  `--footer-muted` — see §14. Footer-local; not for reuse elsewhere.
+- `footer` in `Layout.astro`: three background layers (top-edge bleed
+  gradient, flat scrim wash, the texture), `background-position: ... right
+  center` for the image layer — the strips are ~8:1 and the footer is far
+  shorter, so `cover` crops hard, and the gold/marble detail in both source
+  images sits in the right portion.
+- The 1px `border-top: var(--border)` that used to separate the footer from
+  the page was replaced with a 72px bleed (48px on mobile) — `--bg-primary`
+  fading to transparent over the top edge. A hairline above a textured band
+  reads as "pasted on"; the fade lets the surface rise out of the page
+  instead.
+- `.footer-links a` grew 14px → 16px, `.footer-copy` 10px → 12px. Contrast
+  alone didn't explain what "hard to read" meant here — the fix needed
+  larger type as well as darker/heavier color, not color changes in
+  isolation.
+- `.footer-links a:hover` no longer recolors text to `--accent`. Measured
+  locally, `--accent` over the strip is 2.43:1 (light) and 2.82:1 (dark) —
+  gold-on-gold in dark theme is close to the worst pairing available. Hover
+  now keeps `--footer-text` and underlines in `--accent` instead, which
+  moves the accent color to decoration (no contrast obligation) and drops
+  the reliance on color alone for the affordance (WCAG 1.4.1) — the nav's
+  hover state still recolors to `--accent` and does not have this fix.
+
+### Contrast methodology note (read before touching footer colors again)
+
+Slice-average contrast checks — splitting the strip into ~10 vertical bands
+and measuring against the *average* color of each — are not sufficient on a
+photographic background. Averaging smooths away the pixel-level variance
+that actually makes text hard to read. The working method, and the one that
+caught real failures the average method missed, is a sweep of 16×16px
+windows across the band where text actually sits, at the image's *rendered*
+scale (i.e. resize/crop exactly as CSS `background-size: cover` +
+`background-position: right center` would, then measure). A link color that
+passed on slice averages measured 3.39:1 locally over a single gold patch.
+Re-derive locally, not by average, if the source images, scrim opacity, or
+text alpha values change.
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: August 2026 — homepage composition*
+*Last updated: 2026-08-11 — footer texture (§14, §18)*
