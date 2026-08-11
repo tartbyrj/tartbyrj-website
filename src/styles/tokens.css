@@ -44,6 +44,46 @@
   /* Availability status */
   --available:     #4a6b4f;
   --available-dim: rgba(74, 107, 79, 0.14);
+
+  /* ── Footer texture ──
+     A painted-plaster strip, 1706×199, ~8.6:1. It is the only decorative
+     surface on the site: the nav deliberately has none, because the nav is
+     fixed and would drag a second painted texture across every artwork on
+     the page. The footer is past the last artwork, so it can carry one.
+     AVIF first, WebP fallback — no JPEG tier, both formats are universal in
+     every browser that supports the CSS features this stylesheet already
+     relies on. 22KB, below the fold, one request per theme. */
+  --footer-texture: image-set(
+    url('/images/footer-light.avif') type('image/avif'),
+    url('/images/footer-light.webp') type('image/webp')
+  );
+  /* Composited over the texture as a flat wash. Two jobs, both load-bearing:
+     it lifts the strip's average (222,214,205) toward --bg-primary so the
+     footer reads as the same cream family as the page rather than a grey
+     bar pasted on the bottom; and it raises text contrast over the darkest
+     marble at the right edge — the measured floor — from 3.9:1 to 5.1:1.
+     0.25 is the balance point. Past ~0.32 the texture stops being visible
+     and you have paid 22KB for a flat colour; below ~0.20 --footer-muted
+     drops under 4.5:1 on that right edge. */
+  --footer-scrim:  rgba(250, 247, 244, 0.28);
+  /* Footer-local overrides of --text-secondary / --text-muted. The page
+     tokens are calibrated against flat --bg-primary and --bg-elevated; the
+     footer is the one surface on the site with a photographic background,
+     and both tiers lose roughly a stop of contrast over it. Measured against
+     the darkest 5% slice of the scrimmed strip — the marble at the right
+     edge, which is exactly where .footer-copy lands.
+     These are set against a LOCAL worst case — 16×16px windows swept across
+     the band where the text actually sits, at the strip's rendered scale —
+     not against slice averages. The distinction is the whole ballgame on a
+     photographic background: averaging over a 5% slice smooths away exactly
+     the pixel-level variance that makes type feel washed out, and the first
+     pass of these tokens passed on averages while failing locally.
+     Note the direction of travel in this theme: "more visible" here means
+     DARKER. Raising the lightness of footer text on a cream plate lowers
+     contrast — the intuition that brighter equals more legible only holds
+     on the dark theme. */
+  --footer-text:   rgba(26, 20, 18, 0.94);
+  --footer-muted:  rgba(26, 20, 18, 0.88);
 }
 
 /* ─── DARK THEME ─── */
@@ -82,6 +122,40 @@
   /* Availability status */
   --available:     #8fb894;
   --available-dim: rgba(143, 184, 148, 0.16);
+
+  /* ── Footer texture ── see the light block for the reasoning.
+     The dark strip is 1706×217 and its flat majority already sits near
+     --bg-elevated (avg 28,28,28 vs #181412). The problem here is local, not
+     global: a gold band across the 70–85% region, which right-anchoring puts
+     directly under the footer links and copyright. --text-secondary measures
+     2.72:1 on raw gold. */
+  --footer-texture: image-set(
+    url('/images/footer-dark.avif') type('image/avif'),
+    url('/images/footer-dark.webp') type('image/webp')
+  );
+  /* Deliberately only 0.05 heavier than light, because on a dark theme the
+     scrim is a near-useless lever and it was worth measuring before reaching
+     for it: driving it 0.25 → 0.55 moves the worst-case copyright from
+     3.84:1 to 4.31:1 — still failing — while flattening the gold into mud.
+     Light text on a mid-tone is squeezed from both ends; darkening the plate
+     darkens the composited text almost as fast. The contrast below is bought
+     with text alpha instead, which at a fixed 0.30 scrim moves the same
+     figure 3.94 → 5.5:1 for six hundredths of alpha. Raise the alphas, not
+     this, if the numbers ever need to move again.
+     0.36 rather than 0.30: measured locally rather than as slice averages,
+     the links landed at 3.39:1 over a single gold block at 57% width. This
+     is the one place the scrim earns its keep, because that failure is a
+     local hot spot rather than a global level problem. */
+  --footer-scrim:  rgba(8, 7, 6, 0.36);
+  /* Near-parity between these two is deliberate and is the one place the
+     footer departs from the --text-secondary / --text-muted pattern. Over
+     gold, the alpha needed to clear 4.5:1 locally is high enough that any
+     meaningful gap would push --footer-muted back under the threshold. So
+     the tiers separate by size instead — 16px vs 12px, plus position — which
+     is the separation tokens.css already argues for elsewhere in this file.
+     Do not widen this gap by dimming --footer-muted; shrink the type. */
+  --footer-text:   rgba(240, 235, 227, 0.94);
+  --footer-muted:  rgba(240, 235, 227, 0.90);
 }
 
 /* ─── THEME-INVARIANT TOKENS ─── */

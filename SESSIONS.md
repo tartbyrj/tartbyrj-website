@@ -6,6 +6,89 @@
 
 ---
 
+## Session: 2026-08-11
+
+### Completed
+- Footer redesigned with a photographic painted-plaster texture, both
+  themes — assets `public/images/footer-{light,dark}.{avif,webp}` (AVIF +
+  WebP, 22–27KB each, no JPEG tier), new tokens `--footer-texture`,
+  `--footer-scrim`, `--footer-text`, `--footer-muted` in `tokens.css`
+- `footer` in `Layout.astro`: three-layer `background-image` (bleed
+  gradient, scrim wash, texture), `background-position: right center`,
+  1px `border-top` replaced with a 72px (48px mobile) fade of
+  `--bg-primary` off the top edge
+- `.footer-links a` 14px → 16px; `.footer-copy` 10px → 12px
+- `.footer-links a:hover` no longer recolors to `--accent` — text stays
+  `--footer-text`, `--accent` moved to an underline instead
+- ARCHITECTURE.md §14 token values corrected to match `tokens.css`
+  (`--text-secondary` / `--text-muted` were still showing the pre-AA-fix
+  numbers from the 08-07 session); new §18 written documenting the
+  header/footer decision and the contrast methodology
+- CLAUDE.md CSS variable block corrected to the same current values;
+  footer texture section added with a pointer back to the token comments
+
+### Decisions
+- **Nav does not get the texture; footer does.** `#nav` is
+  `position: fixed` and rides over the hero and every artwork on scroll —
+  a second painted surface there competes with the paintings directly.
+  Also measured as a hard blocker independent of taste: the light header
+  strip failed AA across its *entire* width (2.9–3.4:1) and the dark strip
+  failed specifically at 70–80% width (2.7:1) — exactly where nav links and
+  the theme toggle sit at desktop. The footer is past the last artwork, so
+  nothing competes, and it reads as "the wall the work is hung on."
+- Slice-average contrast checks are not trustworthy on a photographic
+  background — first pass of this work measured contrast as ~10 vertical
+  band averages and passed values that failed locally (a link color that
+  averaged to a pass measured 3.39:1 over one gold patch). Switched to
+  sweeping 16×16px windows across the actual text band at rendered scale.
+  Documented in both CLAUDE.md and ARCHITECTURE.md §18 so it isn't
+  re-litigated next session.
+- Hover state on footer links moves `--accent` to an underline rather than
+  the text color — measured 2.43:1 (light) / 2.82:1 (dark) as text color,
+  both failing, dark especially bad (gold accent on the strip's own gold
+  band). Nav's hover still recolors text to `--accent` — not touched, not
+  verified against this same bar.
+
+### Rejected / Deferred
+- "Both header and footer get the texture" (user's opening ask) — rejected
+  after the header contrast measurement; user confirmed footer-only
+- Tinted/low-opacity texture in the nav's `.scrolled` state as a middle
+  ground — rejected: a scrim strong enough to protect nav-link contrast
+  defeats the point of showing texture at all
+- Center-anchored background-position — rejected in favor of right-anchor;
+  the gold/marble detail in both source strips sits in the right portion,
+  and cover-cropping at mobile widths would hide it under center-anchor
+
+### Not Verified
+- `npx astro check` / `npm run build` — **not run against this change**.
+  Sandbox's `node_modules` has macOS-native `@rolldown/binding-*` bindings
+  that don't resolve on Linux; every attempt errored on module resolution,
+  unrelated to the CSS edit itself. The change is CSS-only inside
+  `footer`'s existing scoped `<style>` block in `Layout.astro` plus new
+  custom properties in `tokens.css` — no TypeScript surface touched — but
+  this is a claim, not a confirmed build. Run both locally before deploying.
+- Rendered in the browser by the user (screenshot supplied, confirmed
+  "looks good" for the texture; the type-size/color follow-up in this
+  session was requested from that screenshot, not independently reproduced
+  by Claude in a live browser)
+- Print stylesheet (`@media print` strips the background-image) — written,
+  not tested against an actual print/PDF render
+
+### Next Session Candidates
+- Run `npx astro check` + `npm run build` locally, confirm 0 errors before
+  this ships
+- Light-theme footer background-position may want its own value separate
+  from dark's — the light strip's gold/tan sits mid-image rather than at
+  the right edge like the dark strip, so right-anchoring crops it less
+  usefully than in dark theme. Flagged, not changed — needs a look with
+  the actual image open, not just the numbers
+- `--accent` hover-state contrast is a pre-existing weakness of `#7a4f2a`
+  independent of the footer work (nav hover has the same underlying issue,
+  just never measured against a textured background) — worth its own pass
+- DNS connection tartbyrj.com → Cloudflare Pages (Phase 4, carried over)
+
+---
+
 ## Session: 2026-08-08
 
 ### Bugs

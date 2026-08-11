@@ -507,16 +507,58 @@ const logo = Object.values(logoFiles)[0]?.default;
      height to resolve. Tagline cap height is roughly 3.8% of the file's
      height — 180px puts it near 7px, which is the point it stops being
      texture. Tune --footer-logo-h. */
+  /* --bleed is the depth of the dissolve at the top edge. The old treatment
+     was a 1px --border hairline, which drew a line the eye reads as "the page
+     stopped here". A textured band under a hairline looks pasted on. Fading
+     --bg-primary out over 72px instead lets the plaster surface up out of the
+     page, which is the whole reason for using a painted texture rather than a
+     flat --bg-elevated block. The bleed is padding the content must clear,
+     so it is added to padding-top rather than overlapping it. */
   footer {
     --footer-logo-h: 180px;
-    padding: 40px 52px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-primary);
+    --bleed: 72px;
+    padding: calc(40px + var(--bleed)) 52px 40px;
+    background-color: var(--bg-primary);
+    /* Three layers, top to bottom: the bleed, the scrim wash, the texture.
+       The scrim is a two-stop gradient of one colour because linear-gradient
+       is the only way to lay a flat rgba over a background-image in the same
+       property — background-color sits under all image layers, not between
+       them. background-size/-position/-repeat below are written as matching
+       three-value lists so each layer is addressed explicitly; leaving them
+       to the shorthand's cycling behaviour is what makes multi-layer
+       backgrounds break the next time someone adds a layer. */
+    background-image:
+      linear-gradient(
+        to bottom,
+        var(--bg-primary) 0%,
+        color-mix(in srgb, var(--bg-primary) 55%, transparent) 45%,
+        transparent 100%
+      ),
+      linear-gradient(var(--footer-scrim), var(--footer-scrim)),
+      var(--footer-texture);
+    background-size: 100% var(--bleed), cover, cover;
+    /* Right-anchored, not centered. The strip is ~8.6:1 and the footer is
+       ~260px tall, so cover scales it to ~2230px wide and crops hard — at
+       390px the visible slice is the right quarter. The gold and marble
+       incident lives in that right quarter; the left two-thirds is flat
+       plaster. Centering would show phones the flat part and crop away the
+       only region worth loading a 22KB image for. */
+    background-position: top center, center, right center;
+    background-repeat: no-repeat, no-repeat, no-repeat;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
     flex-wrap: wrap;
+  }
+
+  /* The texture is decoration with no informational content, and at 22KB it
+     is not worth a print job's ink. Content keeps its colours from tokens. */
+  @media print {
+    footer {
+      background-image: none;
+      padding-top: 40px;
+    }
   }
 
   .footer-logo {
@@ -555,7 +597,11 @@ const logo = Object.values(logoFiles)[0]?.default;
   @media (max-width: 900px) {
     footer {
       --footer-logo-h: 120px;
-      padding: 32px 24px;
+      /* A shallower bleed: the same 72px reads as a much larger share of a
+         wrapped mobile footer, and the dissolve stops being an edge and
+         starts being most of the block. */
+      --bleed: 48px;
+      padding: calc(32px + var(--bleed)) 24px 32px;
     }
   }
 
@@ -564,22 +610,57 @@ const logo = Object.values(logoFiles)[0]?.default;
     gap: 24px;
   }
 
+  /* --footer-text, not --text-secondary. Identical intent, recalibrated for
+     the one surface on the site with a photographic background — see the
+     footer block in tokens.css. The nav's copy of this rule keeps
+     --text-secondary, because the nav has no texture. */
+  /* 16px, not the nav's 14px. Deliberately out of step with .nav-links a,
+     for two reasons. The footer block is ~330px tall against the nav's 100,
+     so the same type reads as undersized in it. And these sit on a
+     photographic surface: heavier strokes hold up against pixel-level
+     variance in a way a contrast ratio does not capture — 14px uppercase
+     does not reach the WCAG large-text tier (18.66px bold / 24px regular),
+     so the 4.5:1 requirement applies either way and the extra weight is
+     bought for legibility, not to relax a threshold. */
   .footer-links a {
-    font-size: 14px;
+    font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-    color: var(--text-secondary);
+    color: var(--footer-text);
     text-decoration: none;
     transition: color var(--dur-base) ease;
   }
 
+  /* The nav's version of this rule recolours the text to --accent. The footer
+     cannot: measured locally over the strip, --accent lands at 2.43:1 in
+     light and 2.82:1 in dark, both well under AA — and dark is the worse of
+     the two precisely because #c9a96e is gold sitting on the gold band, the
+     single worst pairing available. Hover is a state a reader occupies while
+     reading, so it has to clear the threshold like any other.
+     So the text holds --footer-text and the accent moves to the underline,
+     where it is decoration rather than text and carries no contrast
+     obligation. The affordance also stops depending on colour alone, which
+     is what WCAG 1.4.1 asks for and the nav's version does not satisfy. */
   .footer-links a:hover {
-    color: var(--accent);
+    color: var(--footer-text);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 6px;
   }
 
+  /* --footer-muted, not --text-muted: this line sits over the darkest region
+     of the strip, where --text-muted measures 3.90:1 and fails AA. See the
+     footer block in tokens.css for how both footer text tokens were derived.
+     12px, not the original 10px. 10px was already below the floor most
+     accessibility guidance puts on body-adjacent text, and it was the worst
+     case in the whole footer: the smallest type sitting on the busiest part
+     of the strip. Since --footer-muted is now close to --footer-text in
+     value, this size gap plus its position is what separates the two tiers —
+     see the note in tokens.css before dimming it to restore the old gap. */
   .footer-copy {
-    font-size: 10px;
-    color: var(--text-muted);
+    font-size: 12px;
+    color: var(--footer-muted);
   }
 
 </style>
