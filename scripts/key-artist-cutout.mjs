@@ -103,10 +103,14 @@ console.log(`islands    ${islands} stray px dropped, subject blob ${bestSize} px
 // concave pocket between his forearm and his body, where his own outline seals
 // them off from the border, so they read as "interior" on this test exactly the
 // way a highlight does and were the last two grey squares left in the output.
-// Size is what actually separates the two cases here and separates them by a
-// wide margin: every genuine hole in this photo is 6px or under, while a
-// checkerboard cell is 500-1700px. The cap sits an order of magnitude either
-// side of both, so it is not a number tuned to the edge of anything.
+// Size is what actually separates the two cases here: measured against this
+// photo, genuine holes come out at 56px and under (the biggest is the
+// pocket above — most are 1-6px) while a checkerboard cell is 531-1708px.
+// 200 sits between the two with real margin either side (~3.6x the largest
+// real hole, ~2.7x under the smallest checkerboard cell), not tuned to the
+// edge of either. Re-measure both ends on a new source photo before
+// trusting this number unchanged — a different pose or crop could shift
+// either distribution.
 const HOLE_MAX_PX = 200;
 
 const outside = new Uint8Array(W * H);

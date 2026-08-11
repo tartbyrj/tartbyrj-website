@@ -257,22 +257,26 @@ const backdrop = await getImage({
 
   /* Deliberately taller than its own box (.backdrop-clip, which is exactly
      .intro's size) and centred over it via the negative top offset — the
-     spare 15% top and bottom is what the script at the bottom of the page
+     spare 18% top and bottom is what the script at the bottom of the page
      has room to translate through for the parallax, without ever scrolling
      a blank edge into view. Panning background-position within a box sized
      to cover was tried first and dropped: this photo's aspect ratio happens
      to sit close to the section's own, so cover left almost no crop margin
      for a position shift to move through — visible only as a barely
      perceptible flicker. Translating an oversized layer gets a guaranteed
-     amount of real travel out of the same 15%, regardless of how the photo's
+     amount of real travel out of the same 18%, regardless of how the photo's
      and the section's aspect ratios happen to relate at a given viewport
-     size. */
+     size. 18%, not a rounder 15%: the script's RANGE is a percentage of
+     THIS element's own (oversized) height, not of .intro's, so its actual
+     travel across .intro is RANGE × (this height ÷ 100) — see the script
+     comment for the exact figure. 18 is that figure plus a real margin, not
+     the figure itself. */
   .backdrop {
     position: absolute;
     left: 0;
     right: 0;
-    top: -15%;
-    height: 130%;
+    top: -18%;
+    height: 136%;
     background-image: var(--backdrop);
     background-size: cover;
     background-position: center;
@@ -699,13 +703,15 @@ const backdrop = await getImage({
   const backdrop = section?.querySelector<HTMLElement>('.backdrop');
 
   if (section && backdrop && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    // Percent, each direction, of .backdrop's OWN height (130% of the
+    // Percent, each direction, of .backdrop's OWN height (136% of the
     // section's) — translateY(N%) is always relative to the element being
     // moved, not its container. At 12, the actual pixel travel works out to
-    // ±15.6% of the section's own height (12% × 1.3), just inside the 15%
-    // overscan .backdrop was given on each edge — any higher and a fast
-    // scroll could catch the clip wrapper's edge before the next frame
-    // corrects it.
+    // ±16.32% of the section's own height (12% × 1.36), inside the 18%
+    // overscan .backdrop was given on each edge with a real margin (1.68
+    // points) to spare — an earlier version of this comment paired 12
+    // against 15% overscan and called that "just inside," which was wrong:
+    // 12% × 1.3 is 15.6%, already past 15. Keep this margin, not just this
+    // number, if either RANGE or the CSS height/top pair ever moves again.
     const RANGE = 12;
     let queued = false;
 
