@@ -4,17 +4,34 @@ export const FEATURED_ARTWORKS_QUERY = `
 }
 `;
 
+// paintType and surface are the controlled filter tags (src/lib/taxonomy.ts);
+// medium stays alongside them as the display string and is not derived from
+// them.
+//
+// imageDimensions is aliased, not projected as `dimensions` — `dimensions` is
+// already taken by the artwork's own typed size string. It dereferences the
+// asset to read Sanity's stored metadata, which is what lets /works compute
+// justified row heights during the build instead of measuring in the browser.
+// An artwork with no image yields null here, which the schema accepts.
 export const ALL_ARTWORKS_QUERY = `
 *[_type=="artwork"]|order(year desc){
   title,slug,image,year,medium,dimensions,
-  available,price,altText
+  available,price,altText,
+  paintType,surface,
+  "imageDimensions":image.asset->metadata.dimensions{width,height,aspectRatio}
 }
 `;
 
+// Same imageDimensions alias as above. Purely additive: it introduces a new key
+// under a name no page reads yet and leaves every existing key untouched, so
+// /works/[slug] parses exactly the shape it did before. Available for reserving
+// the image's aspect ratio on the detail page when that layout wants it.
 export const ARTWORK_BY_SLUG_QUERY = `
 *[_type=="artwork"&&slug.current==$slug][0]{
   title,slug,image,year,medium,dimensions,
   available,price,altText,
+  paintType,surface,
+  "imageDimensions":image.asset->metadata.dimensions{width,height,aspectRatio},
   collection->{ title, slug }
 }
 `;

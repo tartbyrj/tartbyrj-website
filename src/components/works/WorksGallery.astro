@@ -1,0 +1,563 @@
+---
+/**
+ * The /works gallery — page head, filter bar and the justified grid.
+ *
+ * Both `/works` and `/works/[...filter]` render this, so the layout exists in
+ * one place and a filter route cannot drift from the unfiltered one.
+ *
+ * Ships no JavaScript. Row composition is decided in this frontmatter at build
+ * time; the browser gets finished proportions and never measures anything.
+ *
+ * Note the absence of `.reveal`, which every other page uses for its fade-up on
+ * scroll. That class starts at opacity 0 and depends on the IntersectionObserver
+ * in Layout.astro to become visible. On the one page whose entire content is
+ * paintings, that trades the paintings themselves against a script running — so
+ * this page opts out and renders from first paint, with or without JS.
+ */
+import { urlFor } from '../../lib/sanity/client';
+import { cropAdjustedAspectRatio } from '../../lib/utils/cropAspectRatio';
+import { justifyRows, type PackedRow } from '../../lib/utils/justifyRows';
+import { chipStatus, filterHeading, hrefFor, type FilterState } from '../../lib/works/filters';
+import { PAINT_TYPES, SURFACES } from '../../lib/taxonomy';
+import type { Artwork } from '../../types/artwork';
+
+export interface Props {
+  /** What this view shows — already filtered by the route. */
+  artworks: Artwork[];
+  /** The full set, always. The filter bar is built from this so it offers the
+   *  same options on every route instead of narrowing as you drill in. */
+  allArtworks: Artwork[];
+  /** Both axes, either or both possibly unset. { medium: null, surface: null }
+   *  on /works — there is no separate "no filter" case to special-case. */
+  filter: FilterState;
+}
+
+const { artworks, allArtworks, filter } = Astro.props;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Layout constants.
+
+   PROVISIONAL — there are 3 artworks in Sanity today, so nothing here has been
+   exercised against a real multi-row page. These are defensible starting
+   values, not tuned ones; revisit them once the full set is uploaded.
+
+   TARGET_ROW_HEIGHT drives everything else. At 380px against a 1212px
+   reference container, a landscape work (~1.41) is ~536px wide, so rows land
+   at 2–3 landscapes or 3–4 portraits — enough that a painting is still a
+   painting rather than a swatch, which is the same objection ARCHITECTURE.md
+   §17 raises against the rejected 3-card collections grid.
+
+   MIN_ROW_HEIGHT only engages on a row of six or more narrow works.
+   MAX_ROW_HEIGHT is defensive; see the note in justifyRows().
+   ───────────────────────────────────────────────────────────────────────── */
+const CONTENT_MAX_WIDTH = 1440;
+const PAGE_GUTTER = 52;
+const RAIL_WIDTH = 96;
+const RAIL_GAP = 28;
+const TILE_GAP = 24;
+const TARGET_ROW_HEIGHT = 380;
+const MIN_ROW_HEIGHT = 240;
+const MAX_ROW_HEIGHT = 520;
+// Keep in sync with .works's `--gutter: 24px` override under
+// @media (max-width: 700px) below — this is the same value read back into JS
+// for tileSizes(), which needs it to describe a mobile tile's true width.
+const MOBILE_GUTTER = 24;
+
+/** Reference width of the grid column: page width, less both gutters, less the
+ *  year rail and its gap. Rows are composed for this width and scale
+ *  proportionally away from it — see justifyRows(). */
+const REFERENCE_WIDTH = CONTENT_MAX_WIDTH - PAGE_GUTTER * 2 - RAIL_WIDTH - RAIL_GAP;
+
+/* ── View copy ── */
+const count = artworks.length;
+const years = artworks
+  .map((artwork) => artwork.year)
+  .filter((year): year is number => typeof year === 'number');
+const yearRange =
+  years.length === 0
+    ? null
+    : Math.min(...years) === Math.max(...years)
+      ? `${Math.min(...years)}`
+      : `${Math.min(...years)}–${Math.max(...years)}`;
+
+const eyebrow = [`${count} ${count === 1 ? 'work' : 'works'}`, yearRange]
+  .filter(Boolean)
+  .join(' · ');
+
+// filterHeading() also drives the <title> in [...filter].astro, so the tab
+// title and the H1 can't drift apart. Combo pages read as "Watercolour on
+// Canvas" — the conventional medium-on-surface art label — rather than
+// picking one axis and dropping the other from the heading.
+const isFiltered = filter.medium !== null || filter.surface !== null;
+const heading = filterHeading(filter);
+
+/* ── Filter bar ──
+   Always the complete taxonomy, unconditionally — never narrowed to whatever
+   this route matched. A value nobody has used yet still needs to be visible
+   as a disabled chip, or a visitor has no way to know it exists at all. Which
+   *routes* get generated is a separate, narrower question answered by
+   availableOptions() inside [...filter].astro's getStaticPaths. */
+const paintOptions = PAINT_TYPES;
+const surfaceOptions = SURFACES;
+
+/* ── Grouping and packing ──
+   GROQ already ordered the set by year descending; grouping preserves that
+   order, and justifyRows() never reorders within a group. Undated work sorts
+   last rather than being hidden or guessed into a year. */
+type Packable = { artwork: Artwork; aspectRatio: number | null };
+
+/**
+ * The proportion of the image as it will actually be *delivered*, which is not
+ * always the proportion Sanity stores.
+ *
+ * `imageDimensions` is the asset's metadata — the uncropped original. urlFor()
+ * applies any crop set in Studio (it appends a `rect=` to the URL), so a work
+ * cropped in Studio arrives at a different ratio than its metadata claims, and
+ * the row it was packed into would come out a different height than its
+ * neighbours. The crop-fraction math itself lives in cropAdjustedAspectRatio()
+ * — src/pages/index.astro needs the identical correction for its own work
+ * tiles, from a differently-sourced original ratio, so only the math is
+ * shared, not how each caller arrives at the original ratio.
+ */
+function deliveredAspectRatio(artwork: Artwork): number | null {
+  const dims = artwork.imageDimensions;
+  const metadataRatio =
+    dims?.aspectRatio ??
+    (dims?.width && dims?.height ? dims.width / dims.height : null);
+
+  if (metadataRatio === null) return null;
+  return cropAdjustedAspectRatio(metadataRatio, artwork.image?.crop);
+}
+
+const buckets = new Map<string, { label: string; items: Packable[] }>();
+for (const artwork of artworks) {
+  const key = typeof artwork.year === 'number' ? String(artwork.year) : 'undated';
+  const label = typeof artwork.year === 'number' ? String(artwork.year) : 'Undated';
+  const bucket = buckets.get(key) ?? { label, items: [] };
+  bucket.items.push({ artwork, aspectRatio: deliveredAspectRatio(artwork) });
+  buckets.set(key, bucket);
+}
+
+const groups: { key: string; label: string; rows: PackedRow<Packable>[] }[] = [
+  ...buckets.entries(),
+].map(([key, bucket]) => ({
+  key,
+  label: bucket.label,
+  rows: justifyRows(bucket.items, {
+    containerWidth: REFERENCE_WIDTH,
+    targetHeight: TARGET_ROW_HEIGHT,
+    gap: TILE_GAP,
+    minHeight: MIN_ROW_HEIGHT,
+    maxHeight: MAX_ROW_HEIGHT,
+  }),
+}));
+
+/* Tiles render `alt=""` on purpose. The link wrapping each image already
+   carries the title as visible text, so descriptive alt would concatenate into
+   the link's accessible name and a screen reader would announce the title
+   twice — ARCHITECTURE.md §8. Descriptive `altText` still stands alone on
+   /works/[slug], where there is no adjacent label. */
+
+// Same width ladder and format/quality as index.astro's workSrcSet — one
+// responsive-image convention for the whole site, not a second one here.
+// Never the original asset — see CLAUDE.md.
+const TILE_WIDTHS = [400, 800, 1200];
+const TILE_BASE_WIDTH = 800;
+
+function tileSrcSet(image: NonNullable<Artwork['image']>): string {
+  return TILE_WIDTHS.map(
+    (w) => `${urlFor(image).width(w).format('webp').quality(85).url()} ${w}w`
+  ).join(', ');
+}
+
+/**
+ * What this exact tile renders at, per breakpoint — not one size for every
+ * tile, since each tile's width is `share` (an item's fraction of its row,
+ * computed by justifyRows) of the row's available width, and every tile has
+ * a different share. Written in vw/calc so it tracks the live viewport
+ * instead of freezing a build-time snapshot; the desktop branch mirrors
+ * REFERENCE_WIDTH's own arithmetic, just kept symbolic instead of resolved to
+ * a number, and the mobile branch matches the CSS rule that drops row
+ * packing below 700px entirely — every tile is full width there, less the
+ * mobile gutter, regardless of its share.
+ */
+function tileSizes(share: number): string {
+  const desktopChrome = PAGE_GUTTER * 2 + RAIL_WIDTH + RAIL_GAP;
+  const desktopWidth = `calc((min(100vw, ${CONTENT_MAX_WIDTH}px) - ${desktopChrome}px) * ${share.toFixed(4)})`;
+  const mobileWidth = `calc(100vw - ${MOBILE_GUTTER * 2}px)`;
+  return `(min-width: 700px) ${desktopWidth}, ${mobileWidth}`;
+}
+
+const rootVars = [
+  `--content-max:${CONTENT_MAX_WIDTH}px`,
+  `--gutter-lg:${PAGE_GUTTER}px`,
+  `--rail-w:${RAIL_WIDTH}px`,
+  `--rail-gap:${RAIL_GAP}px`,
+  `--tile-gap:${TILE_GAP}px`,
+].join(';');
+---
+
+<div class="works" style={rootVars}>
+  <div class="works-inner">
+    <header class="works-head">
+      <p class="works-eyebrow">{eyebrow}</p>
+      <h1 class="works-title">{heading}</h1>
+    </header>
+
+    <nav class="filter-bar" aria-label="Filter works">
+      <a
+        class:list={['filter-link', !isFiltered && 'is-active']}
+        href="/works"
+        aria-current={!isFiltered ? 'page' : undefined}
+      >
+        All
+      </a>
+
+      {paintOptions.map((option) => {
+        const status = chipStatus(allArtworks, filter, 'medium', option.value);
+        return status === 'disabled' ? (
+          <span class="filter-link is-disabled" aria-disabled="true">
+            {option.title}
+          </span>
+        ) : (
+          <a
+            class:list={['filter-link', status === 'active' && 'is-active']}
+            href={hrefFor(filter, 'medium', option.value)}
+            aria-current={status === 'active' ? 'page' : undefined}
+          >
+            {option.title}
+          </a>
+        );
+      })}
+
+      <span class="filter-sep" aria-hidden="true"></span>
+
+      {surfaceOptions.map((option) => {
+        const status = chipStatus(allArtworks, filter, 'surface', option.value);
+        return status === 'disabled' ? (
+          <span class="filter-link is-disabled" aria-disabled="true">
+            {option.title}
+          </span>
+        ) : (
+          <a
+            class:list={['filter-link', status === 'active' && 'is-active']}
+            href={hrefFor(filter, 'surface', option.value)}
+            aria-current={status === 'active' ? 'page' : undefined}
+          >
+            {option.title}
+          </a>
+        );
+      })}
+    </nav>
+
+    {groups.length > 0 ? (
+      groups.map((group, groupIndex) => (
+        <section class="year-group" aria-labelledby={`year-${group.key}`}>
+          <div class="year-rail">
+            <h2 class="year-marker" id={`year-${group.key}`}>{group.label}</h2>
+          </div>
+
+          <div class="year-rows">
+            {group.rows.map((row, rowIndex) => (
+              <div class="row" style={`--gaps:${row.gapTotal}px`}>
+                {row.items.map(({ item, width, share, aspectRatio }) => {
+                  const image = item.artwork.image;
+                  return (
+                    <a
+                      class="tile"
+                      href={`/works/${item.artwork.slug.current}`}
+                      style={`--share:${share.toFixed(5)}`}
+                    >
+                      <div class="tile-frame" style={`--frame-ratio:${aspectRatio}`}>
+                        {image ? (
+                          <img
+                            src={urlFor(image).width(TILE_BASE_WIDTH).format('webp').quality(85).url()}
+                            srcset={tileSrcSet(image)}
+                            sizes={tileSizes(share)}
+                            alt=""
+                            width={Math.round(width)}
+                            height={Math.round(row.height)}
+                            loading={groupIndex === 0 && rowIndex === 0 ? 'eager' : 'lazy'}
+                            decoding="async"
+                          />
+                        ) : (
+                          <div class="tile-blank"></div>
+                        )}
+                      </div>
+                      <span class="tile-title">{item.artwork.title}</span>
+                      {item.artwork.medium && (
+                        <span class="tile-medium">{item.artwork.medium}</span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </section>
+      ))
+    ) : (
+      <p class="works-empty">Works coming soon.</p>
+    )}
+  </div>
+</div>
+
+<style>
+  .works {
+    /* Overridden below the mobile breakpoint; the inline style on the element
+       only supplies --gutter-lg, so this stays a CSS decision. */
+    --gutter: var(--gutter-lg);
+    background: var(--bg-primary);
+    padding-bottom: var(--space-section);
+  }
+
+  /* The only page on the site with a max width. Justified rows scale with their
+     container, so an unbounded one would render 700px-tall rows on a wide
+     display. The cap holds row height near its target instead. */
+  .works-inner {
+    max-width: var(--content-max);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+
+  .works-head {
+    padding-top: calc(var(--nav-h) + 40px);
+  }
+
+  .works-eyebrow {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  /* Sized as a section heading (matches the homepage's .about-heading tier),
+     not the hero/page-title scale .page-title and .hero-name use elsewhere on
+     the site — this page's subject is the grid of paintings below it, not the
+     headline itself. */
+  .works-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.1;
+    color: var(--text-primary);
+    margin: 10px 0 0;
+  }
+
+  /* Real links, not buttons — each filter is a page, so back, bookmarking and
+     opening in a new tab all work without a line of script. */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 28px;
+    padding-bottom: 4px;
+    /* Scrolls sideways on a narrow screen rather than wrapping into a block or
+       hiding behind a drawer: the full vocabulary stays visible and one swipe
+       away. Scoped to this element, so the page itself never scrolls
+       horizontally. */
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-inline: contain;
+  }
+
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-link {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    /* 44px is the touch-target floor; the 8px bar gap keeps neighbours from
+       stealing taps. */
+    min-height: 44px;
+    padding: 0 18px;
+    font-family: var(--font-sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease;
+  }
+
+  .filter-link:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  /* Weight as well as colour, so the current filter is not signalled by hue
+     alone (WCAG 1.4.1). */
+  .filter-link.is-active {
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* A <span>, not an <a> without href — genuinely not a link, so it's out of
+     the tab order and screen readers don't announce it as one. aria-disabled
+     signals "this option exists but doesn't apply here" rather than hiding
+     it, which is the whole point: a visitor should be able to see that Oil
+     exists even while looking at Watercolour, just not follow it to nothing.
+     Contrast intentionally goes below AA — WCAG 1.4.3 exempts inactive UI
+     components, and a chip that reads clearly is a chip that looks clickable. */
+  .filter-link.is-disabled {
+    color: var(--text-muted);
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .filter-sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 20px;
+    margin-inline: 10px;
+    background: var(--border-strong);
+  }
+
+  .year-group {
+    display: grid;
+    gap: 16px;
+    padding-top: 52px;
+  }
+
+  .year-marker {
+    position: sticky;
+    top: calc(var(--nav-h) + 24px);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .year-rows {
+    display: grid;
+    gap: var(--tile-gap);
+  }
+
+  /* Mobile: one column, full width. No packing at these widths — a justified
+     row of three paintings on a phone is three thumbnails. */
+  .row {
+    display: grid;
+    gap: var(--tile-gap);
+  }
+
+  .tile {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  /* Thin gallery mat, applied identically to every tile regardless of
+     whether the source photo is a bare flat scan or already shot
+     framed/on an easel — RJ's photography style varies per work, and one
+     consistent mat behind every tile makes that variation disappear rather
+     than the layout trying to detect it per artwork.
+
+     aspect-ratio + box-sizing: border-box is what keeps this from becoming a
+     third crop-ratio-class bug this session: the frame's *outer* box is
+     exactly what justifyRows() packed — width from --share below, height
+     derived by the browser as width ÷ --frame-ratio, which is the same
+     division justifyRows itself used to build --share, so every tile in a
+     row lands on the identical height without a separate row-height
+     variable to keep in sync. Padding and border are drawn INSIDE that box,
+     never added on top of it, so row widths keep summing to the container
+     exactly. The image renders fractionally smaller to make room for the
+     mat — expected, not a bug. */
+  .tile-frame {
+    box-sizing: border-box;
+    aspect-ratio: var(--frame-ratio);
+    padding: 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    overflow: hidden;
+  }
+
+  .tile-frame img,
+  .tile-blank {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: var(--bg-secondary);
+  }
+
+  .tile-title {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 19px;
+    line-height: 1.25;
+    color: var(--text-primary);
+    margin-top: 14px;
+    transition: color var(--dur-base) ease;
+  }
+
+  /* Permanently in flow, never behind a hover state — a caption that only
+     exists on hover does not exist at all on a touch screen. */
+  .tile-medium {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+
+  .tile:hover .tile-title,
+  .tile:focus-visible .tile-title {
+    color: var(--accent);
+  }
+
+  .works-empty {
+    padding: 80px 0 var(--space-section);
+    text-align: center;
+    color: var(--text-secondary);
+  }
+
+  @media (min-width: 700px) {
+    .year-group {
+      grid-template-columns: var(--rail-w) 1fr;
+      gap: var(--rail-gap);
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: var(--tile-gap);
+    }
+
+    /* The share is the whole layout: each tile takes its slice of the row's
+       usable width, so the proportions decided at build time hold at every
+       viewport without a resize listener. min-width lets a row wrap instead of
+       shrinking into thumbnails on a small tablet — a wrapped row stops being
+       justified, which is a better failure than an unreadable one. */
+    .tile {
+      width: calc((100% - var(--gaps)) * var(--share));
+      min-width: min(100%, 230px);
+    }
+  }
+
+  @media (max-width: 700px) {
+    .works {
+      --gutter: 24px;
+      padding-bottom: var(--space-section-m);
+    }
+
+    .works-title {
+      font-size: clamp(24px, 8vw, 32px);
+    }
+
+    .year-group {
+      padding-top: 40px;
+    }
+  }
+</style>

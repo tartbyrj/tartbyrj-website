@@ -1,0 +1,69 @@
+---
+/**
+ * Filter routes: single-axis (/works/medium/<value>, /works/surface/<value>)
+ * and combo (/works/medium/<value>/surface/<value>).
+ *
+ * One shared, memoized Sanity fetch (src/lib/works/data.ts) covers every
+ * generated route — getStaticPaths runs once and hands each page its
+ * already-filtered slice as props.
+ *
+ * A route is only generated if its intersection is non-empty. For single-axis
+ * that means "at least one artwork carries this tag"; for combo it means "at
+ * least one artwork carries both" — the two are different questions (a medium
+ * and a surface can each individually have matches with nobody satisfying
+ * both), so combo generation re-checks rather than assuming from the
+ * single-axis result. This is what replaces the old chip row, which offered
+ * every option unconditionally and blanked the grid when one matched nothing.
+ */
+import WorksGallery from '../../components/works/WorksGallery.astro';
+import Layout from '../../layouts/Layout.astro';
+import { getAllArtworks } from '../../lib/works/data';
+import { PAINT_TYPES, SURFACES } from '../../lib/taxonomy';
+import {
+  availableOptions,
+  filterArtworks,
+  filterDescription,
+  filterHeading,
+  filterSegments,
+  type FilterState,
+} from '../../lib/works/filters';
+import type { Artwork } from '../../types/artwork';
+
+export interface Props {
+  artworks: Artwork[];
+  allArtworks: Artwork[];
+  filter: FilterState;
+}
+
+export async function getStaticPaths() {
+  const artworks = await getAllArtworks();
+
+  const toPath = (state: FilterState) => ({
+    params: { filter: filterSegments(state).join('/') },
+    props: { filter: state, allArtworks: artworks, artworks: filterArtworks(artworks, state) },
+  });
+
+  const singleAxis = [
+    ...availableOptions(artworks, 'medium').map((medium) => toPath({ medium, surface: null })),
+    ...availableOptions(artworks, 'surface').map((surface) => toPath({ medium: null, surface })),
+  ];
+
+  // Every medium × surface pair that actually co-occurs. 6 × 3 = 18 possible
+  // combos; only the ones with a real match get a route — see the file
+  // comment above.
+  const combos = PAINT_TYPES.flatMap((medium) =>
+    SURFACES.flatMap((surface) => {
+      const state: FilterState = { medium, surface };
+      return filterArtworks(artworks, state).length > 0 ? [toPath(state)] : [];
+    })
+  );
+
+  return [...singleAxis, ...combos];
+}
+
+const { artworks, allArtworks, filter } = Astro.props;
+---
+
+<Layout title={filterHeading(filter)} description={filterDescription(filter)}>
+  <WorksGallery artworks={artworks} allArtworks={allArtworks} filter={filter} />
+</Layout>

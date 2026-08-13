@@ -1,20 +1,28 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
-import { parseList } from '../../lib/sanity/parse';
-import { ALL_ARTWORKS_QUERY, ARTWORK_BY_SLUG_QUERY } from '../../lib/sanity/queries';
+import { ARTWORK_BY_SLUG_QUERY } from '../../lib/sanity/queries';
+import { getAllArtworks } from '../../lib/works/data';
 import { ArtworkSchema } from '../../types/artwork';
 
 export async function getStaticPaths() {
-  const raw = await client.fetch(ALL_ARTWORKS_QUERY).catch(() => null);
-  const artworks = parseList(ArtworkSchema, raw, 'ALL_ARTWORKS_QUERY');
+  // Shared, memoized fetch — see src/lib/works/data.ts. /works and
+  // /works/[...filter] read the same cached promise, so the slug list this
+  // page generates paths from can no longer disagree with the artwork set
+  // those pages link tiles to.
+  const artworks = await getAllArtworks();
 
   return artworks.map((a) => ({ params: { slug: a.slug.current } }));
 }
 
 const { slug } = Astro.params;
 
-const raw = await client.fetch(ARTWORK_BY_SLUG_QUERY, { slug }).catch(() => null);
+const raw = await client.fetch(ARTWORK_BY_SLUG_QUERY, { slug }).catch((error: unknown) => {
+  console.error(
+    `[sanity] ARTWORK_BY_SLUG_QUERY (slug=${slug}): fetch failed — ${error instanceof Error ? error.message : String(error)}`
+  );
+  return null;
+});
 const result = ArtworkSchema.safeParse(raw);
 
 if (!result.success) {

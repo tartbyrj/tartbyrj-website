@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { parseList } from '../lib/sanity/parse';
+import { cropAdjustedAspectRatio } from '../lib/utils/cropAspectRatio';
 import {
   FEATURED_ARTWORKS_QUERY,
   COLLECTIONS_INDEX_QUERY,
@@ -131,7 +132,10 @@ function workGeometry(image: NonNullable<Artwork['image']>) {
   const parsed = dims ? Number(dims[1]) / Number(dims[2]) : NaN;
   const original = Number.isFinite(parsed) && parsed > 0 ? parsed : WORK_FALLBACK_RATIO;
 
-  // Sanity stores the crop as the fraction trimmed off each edge.
+  // Sanity stores the crop as the fraction trimmed off each edge. The ratio
+  // correction itself is shared with WorksGallery.astro's deliveredAspectRatio
+  // (src/lib/utils/cropAspectRatio.ts) — same math, differently-sourced
+  // original ratio, so only the math moved, not how it's arrived at here.
   const crop = image.crop;
   const left = crop?.left ?? 0;
   const top = crop?.top ?? 0;
@@ -144,7 +148,7 @@ function workGeometry(image: NonNullable<Artwork['image']>) {
 
   const hotspot = image.hotspot;
   return {
-    ratio: usable ? original * (keptW / keptH) : original,
+    ratio: cropAdjustedAspectRatio(original, crop),
     focus:
       hotspot && usable
         ? `${pct((hotspot.x - left) / keptW)} ${pct((hotspot.y - top) / keptH)}`
