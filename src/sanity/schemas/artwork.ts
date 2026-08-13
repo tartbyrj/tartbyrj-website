@@ -1,4 +1,5 @@
 import { defineField, defineType } from 'sanity';
+import { PAINT_TYPES, SURFACES, toSanityOptions } from '../../lib/taxonomy';
 
 export default defineType({
   name: 'artwork',
@@ -38,6 +39,36 @@ export default defineType({
       name: 'medium',
       title: 'Medium',
       type: 'string',
+    }),
+    // Filter tags. Grouped directly under Medium because that is the field they
+    // have to agree with — and nothing enforces that agreement, so proximity in
+    // Studio is the only nudge there is. Options come from src/lib/taxonomy.ts;
+    // do not inline a second copy of either list here.
+    defineField({
+      name: 'paintType',
+      title: 'Paint Type',
+      type: 'array',
+      of: [{ type: 'string' }],
+      options: {
+        list: toSanityOptions(PAINT_TYPES),
+      },
+      description:
+        'Tick every paint you used — these tags decide which filter buttons ' +
+        'show this work on the All Works page. Keep them matching what you ' +
+        'typed in Medium above; nothing checks that for you.',
+    }),
+    defineField({
+      name: 'surface',
+      title: 'Surface',
+      type: 'string',
+      options: {
+        list: toSanityOptions(SURFACES),
+        layout: 'radio',
+      },
+      description:
+        'Pick what you painted on — this decides which surface filter shows ' +
+        'this work on the All Works page. Keep it matching what you typed in ' +
+        'Medium above; nothing checks that for you.',
     }),
     defineField({
       name: 'dimensions',

@@ -882,7 +882,178 @@ text alpha values change.
 
 ---
 
+## 19. All Works Page
+
+### Structure
+
+`/works` shows every artwork grouped by year, newest first, with a sticky
+year marker in a left rail. There is no pagination and no client-side
+filtering — every state of this page, filtered or not, is a separate
+pre-rendered static route.
+
+### Filtering: two independent tag axes, not one
+
+Artworks carry two controlled-vocabulary fields, both sourced from
+`src/lib/taxonomy.ts` — the single source of truth for every option label
+and value used anywhere on this page:
+
+- `paintType` — array, multi-select (Acrylic, Oil, Watercolour, Mixed,
+  Charcoal, Ink). A work can genuinely be more than one.
+- `surface` — string, single-select (Canvas, Paper, Wall). A physical work
+  has exactly one surface.
+
+Both are separate from the existing `medium` free-text field, which remains
+the human-readable display string under each tile ("Acrylic, Texture paste
+and Mixed Media on Canvas") and is never generated from the tags. Tags are
+for routing and filtering only; `medium` is for reading. Nothing validates
+that the two stay consistent — the Studio field descriptions ask Rupjyoti
+to keep them in sync by hand.
+
+`.nullish()`, not `.enum()`, on both Zod fields — a taxonomy value renamed
+later while old documents still carry the previous string must not cause
+`safeParse` to drop the artwork, which is the exact failure mode that wiped
+the homepage grid in the 2026-08-07 session. Unknown or unset tag values
+are filtered out at the route layer, where failing is cheap, not at the
+schema layer, where failing is catastrophic.
+
+### Routes
+
+/works
+/works/medium/<value>
+/works/surface/<value>
+/works/medium/<value>/surface/<value>
+
+
+All generated via `getStaticPaths()` in `src/pages/works/[...filter].astro`,
+fetching once through the shared `getAllArtworks()` in
+`src/lib/works/data.ts` and filtering in memory — never one Sanity query per
+route. Any route whose filter (or filter combination) matches zero
+artworks is not generated. There is no dead-chip state: every chip that
+renders as a link points at a route that exists.
+
+18 combo routes are mathematically possible (6 paint types × 3 surfaces);
+only the combinations with at least one matching artwork are built. This
+number will grow as real inventory is tagged and should not be expected to
+stay near-empty — revisit whether combo filtering is pulling its weight
+once the full catalogue is tagged.
+
+### Chip bar: three states, not two
+
+Every taxonomy value renders on every route, unconditionally, regardless of
+what's on the current page. Chips carry one of three states, computed in
+`chipStatus()` (`src/lib/works/filters.ts`):
+
+- **active** — this route's own filter.
+- **enabled** — a real `<a href>`. A same-axis chip (another paint type,
+  while a paint type is already active) checks the full dataset, since
+  selecting it replaces the current filter. A cross-axis chip (a surface,
+  while a paint type is active) checks the intersection with the active
+  filter, since selecting it combines rather than replaces.
+- **disabled** — a `<span aria-disabled="true">` with no `href` at all —
+  not an anchor with a missing href. Out of tab order, cannot be
+  activated. Rendered when no artwork anywhere (or no artwork within the
+  current active filter, for a cross-axis chip) matches the value.
+
+Cross-axis chip hrefs point at the combined route
+(`/works/medium/watercolour/surface/canvas`), not the bare single-axis
+route — an early build had this wrong and silently dropped the active
+filter on click. Clicking the currently-active chip de-selects just that
+axis and falls back to the other axis's single-axis route, or to `/works`
+if nothing else is active.
+
+The chip list must always be computed from `taxonomy.ts` directly. It must
+never be derived from the artworks present on the current filtered page —
+that produces a chip bar that shrinks every time a filter is applied, which
+looks like missing data and was shipped once by mistake before being
+caught.
+
+### Row layout: build-time justified rows, not masonry or a cropped grid
+
+`src/lib/utils/justifyRows.ts` is a pure function, no Astro or DOM
+dependency, called from each page's frontmatter. It packs artworks into
+rows using each image's true aspect ratio — pulled from
+`asset->metadata.dimensions` in `ALL_ARTWORKS_QUERY` — so that no painting
+is ever cropped to fit a grid cell. This was a hard requirement, not a
+preference: cropping the artwork to fit a layout fails the project's North
+Star test directly.
+
+Two guards matter more than the row-fill happy path:
+
+- **`minHeight`/`maxHeight` clamp.** A row that would justify below the
+  height floor donates its last item to the next row instead of stretching
+  past the container width. One documented, accepted exception: a single
+  item with an aspect ratio wide enough that it cannot reach the floor
+  even alone at full container width (roughly ≥5:1) renders shorter than
+  the floor rather than overflowing the page. This was verified by fuzz
+  test, not assumed — see the commit history around the 2026-08-13 code
+  review for the actual trial data.
+- **Trailing partial row never stretches.** The last row of a group (most
+  visibly, small filtered results with only one or two matches) renders at
+  natural width, left-aligned, not stretched to fill the container.
+
+### Crop-adjusted aspect ratio
+
+`asset->metadata.dimensions.aspectRatio` is the *uncropped* source image's
+ratio. If a hotspot/crop is set in Studio, `urlFor()` delivers a cropped
+image whose actual ratio differs from that metadata value — packing rows
+against the wrong ratio misaligns row heights the moment any artwork has a
+crop applied. `src/lib/utils/cropAspectRatio.ts` corrects the metadata
+ratio using the artwork's stored crop fractions before it reaches the
+packer. Both `WorksGallery.astro` and `index.astro` call this one shared
+function — it was briefly duplicated between the two files during
+development and consolidated to prevent the two copies drifting apart.
+
+### Mat treatment
+
+Every tile — regardless of whether the source photograph is a bare, flat
+scan of the artwork or an in-situ shot on an easel or in a physical frame
+— renders inside a uniform thin mat (`.tile-frame`: 6px padding, 1px
+`--border-strong` line, 6px radius, `--bg-secondary` fill). This is a
+deliberate presentation-consistency decision, not a stylistic default:
+Rupjyoti's photography style varies per artwork, and a uniform mat makes
+that inconsistency disappear behind one consistent gallery-card treatment
+rather than requiring every future upload to match a single shooting
+style. It is applied only on `/works`; the artwork detail page
+(`/works/[slug]`) remains unmatted, since that page's purpose is showing
+the work itself, not a wall of tiles.
+
+The mat is sized via `aspect-ratio: var(--frame-ratio)` combined with
+`box-sizing: border-box` on `.tile-frame`, so the mat's padding is carved
+out of the width `justifyRows()` already computed rather than added on top
+of it — this preserves the row-packing guarantees above without needing a
+second variable threading the row height separately. Image sizing inside
+the mat uses `object-fit: contain`, not `cover`, since the mat's fixed
+padding on a non-square box means the padded content area's ratio won't
+exactly equal the image's true ratio.
+
+### Known dev-only gotcha
+
+`getAllArtworks()` memoizes its fetch at module scope for production
+builds — correct and intentional, since each Cloudflare build is a fresh
+process and this guarantees every route on a given build sees the same
+document snapshot. In `npm run dev`, this same cache is skipped
+(`import.meta.env.DEV`) because Vite's HMR has no way to know a Sanity
+Studio edit happened — editing content doesn't touch any file Vite
+watches, so an un-gated cache would silently serve stale tags until the
+dev server is restarted by hand.
+
+### Deferred, not forgotten
+
+- `filterArtworks` runs twice per combo route in `getStaticPaths`, and
+  `chipStatus` rescans the full artwork array per chip per route. Free at
+  current catalogue size; revisit once the real ~25-work catalogue is
+  live and build time is a measured number, not a guess.
+- The meta description on `/works/index.astro` hand-duplicates the
+  taxonomy list in prose rather than generating it — low priority, but
+  will drift if the taxonomy changes.
+- `filterDescription()`'s fallback string for a combo state with no
+  matching heading text is currently unreachable given how routes are
+  generated, but not guarded — worth a defensive fallback if the route
+  generation logic ever changes.
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: 2026-08-11 — footer texture (§14, §18)*
+*Last updated: 2026-08-13 — All Works page: taxonomy, routing, chip states, row packing, crop-ratio correction, mat treatment (§19)*

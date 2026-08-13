@@ -23,7 +23,30 @@ export const ArtworkSchema = z.object({
     .nullish(),
   year: z.number().nullish(),
   medium: z.string().nullish(),
+  // Filter tags from src/lib/taxonomy.ts. Deliberately plain strings, NOT
+  // z.enum() over the taxonomy values: an enum turns a renamed tag on an
+  // already-published document into a parse failure, and parseList drops the
+  // whole artwork on a parse failure — the exact failure mode that emptied the
+  // homepage grid on 2026-08-07. Here an unknown tag costs nothing; the /works
+  // routes filter it out at render time, where failing is cheap and local.
+  paintType: z.array(z.string()).nullish(),
+  surface: z.string().nullish(),
   dimensions: z.string().nullish(),
+  // Intrinsic pixel size of the uploaded image, read from Sanity's asset
+  // metadata so /works can pack justified rows at build time with no
+  // client-side measuring JS. Declared (like CollectionSchema.artworkCount)
+  // because it is a GROQ-computed key that Zod would otherwise strip.
+  //
+  // Named imageDimensions, not dimensions: `dimensions` above is Rupjyoti's
+  // typed display string ("24 × 36 in"), and collapsing the two would replace
+  // it with an object everywhere it is rendered.
+  imageDimensions: z
+    .object({
+      width: z.number().nullish(),
+      height: z.number().nullish(),
+      aspectRatio: z.number().nullish(),
+    })
+    .nullish(),
   available: z.boolean().nullish(),
   price: z.number().nullish(),
   // Accepts both shapes this field arrives in: a raw reference ({_ref}) from
