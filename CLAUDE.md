@@ -56,6 +56,14 @@ Plan:        Free
 - `ALL_ARTWORKS_QUERY` — all artworks, order year desc
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
 - `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
+- `COLLECTIONS_ALL_QUERY` — /collections index, no limit, order year desc,
+  includes tagline + artworkCount. Separate from COLLECTIONS_INDEX_QUERY
+  above (that one caps at 4 for the homepage).
+- `ARTWORK_TOTAL_QUERY` — not in this file. It was drafted
+  (count(*[_type=="artwork" && defined(slug.current)])) to power a
+  /collections head-block "VIEW ALL WORKS" link, then removed along with
+  that link in the same session once it was cut in favour of the nav's
+  WORKS item. Note left here so it isn't re-added without a real consumer.
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
 - `COLLECTION_NEIGHBOURS_QUERY` — title + slug for every collection, order
   year desc. Feeds getStaticPaths on collections/[slug] and the prev/next
@@ -81,7 +89,9 @@ src/
     index.astro                 ← homepage
     works/index.astro           ← all artworks grid
     works/[slug].astro          ← individual artwork + JSON-LD
-    collections/index.astro     ← all collections grid
+    collections/index.astro     ← editorial index (alternating cover/text
+                                    rows, no work-thumbnail preview — see
+                                    ARCHITECTURE.md §21)
     collections/[slug].astro    ← collection detail (storyPages + artworks)
     about.astro
     contact.astro               ← v2 placeholder
@@ -205,6 +215,9 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - If you add a color not in tokens.css, add it there first
 - `.reveal` + `.reveal.visible` classes defined in global.css — use them for all scroll animations
 - `text-transform: uppercase` on labels/eyebrows is intentional — do not remove from `.nav-links a`, `.footer-links a`, `.hero-eyebrow`, `.sec-label`
+- `.ci-eyebrow` and `.works-eyebrow` share font-size/letter-spacing (11px,
+  0.22em) intentionally — any future eyebrow component should match this,
+  not invent a third value
 
 ### Scroll reveal
 ```html
@@ -233,12 +246,13 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 ```
 Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
               (run `npm run build` output for current count)
-Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
+Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main —
+              see Deployment note below: latest work not yet merged)
 Sanity:       webhook → Cloudflare deploy hook, live
-TS errors:    0 (last confirmed 2026-08-08; footer texture change on
-              2026-08-11 is CSS-only inside an existing <style> block —
-              re-run `npx astro check` + `npm run build` to reconfirm, not
-              yet run against that change)
+TS errors:    0 (confirmed 2026-08-14 after collections-index rebuild +
+              works-head alignment — see SESSIONS.md same date)
+Not verified: 700px breakpoint boundary pixel-exact (works-head/gallery
+              rail split)
 Build:        clean (see note above)
 ```
 
@@ -253,6 +267,10 @@ Phase 3 is **done** — the site is live and rebuilds automatically:
 5. ✅ Sanity webhook → Cloudflare deploy hook (auto-rebuild on publish)
 
 **Remaining — Phase 4:** custom domain `tartbyrj.com` → DNS to Cloudflare Pages
+
+**Note:** collections-index redesign + works-head alignment (2026-08-14)
+committed to `all-works`, not yet merged to `main` — not live on
+tartbyrj.pages.dev until merged.
 
 ## Phase 2 Features (not yet built)
 - Contact/inquiry form — Formspree (placeholder at /contact)

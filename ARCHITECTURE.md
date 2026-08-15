@@ -1189,7 +1189,117 @@ skipped entirely with only one collection.
 
 ---
 
+## 21. Collections Index Page
+
+### Structure (locked)
+
+`/collections` renders as a thin editorial index: a page head, then one
+`<section>` per collection, alternating cover/text sides. It is
+deliberately not a scaled-down version of homepage §17's D1 pattern —
+that pattern was built for a card-density tradeoff (3 collections'
+worth of thumbnails competing for attention on the homepage); this page
+has one job, get a visitor into a collection, and reads more like a
+contents page than a grid.
+
+### Page head
+
+Eyebrow reads `COLLECTIONS`, not `COLLECTIONS & WORKS`. The page indexes
+collections only — no individual artwork is listed anywhere on it — so
+the eyebrow must not claim coverage it doesn't deliver. This mirrors the
+nav label exactly.
+
+H1 is a single line: "Where each collection holds a moment lived" — the
+first clause in `--text-primary`, "holds a moment lived" in
+`--font-serif` italic accent color. This copy was chosen to cover the
+full range of what a "collection" is on this site — not just painting
+series, but community workshop documentation and mural project records —
+so the language deliberately doesn't say "paintings" or "walls."
+
+No secondary CTA in the head block. An earlier draft included a
+"VIEW ALL WORKS →" link to `/works`; it was cut once the nav's own WORKS
+item was judged sufficient — a second link doing the same job as
+existing nav one row below it added noise without adding a real
+shortcut. `ARTWORK_TOTAL_QUERY` (queries.ts), added to power that link,
+was removed in the same pass once the link was cut and no other
+consumer existed — check for a second consumer again before reviving it.
+
+### Collection rows
+
+One `<section>` per collection, `border-top: 1px solid var(--border-strong)`
+separator per §17's pattern, ordered `year desc`. At `>=1024px`, two-column
+grid, alternating: odd rows render cover left / text right, even rows
+mirror via `:nth-child(even)` — one markup structure, not duplicated per
+side.
+
+Text column, top to bottom:
+- Meta line: two-digit index, flex-grow hairline rule, then
+  `${artworkCount} work` / `${artworkCount} works` (singular at exactly
+  1 — deviates from an earlier literal `${n} WORKS` spec, kept because
+  "1 works" reads as a typo, not a feature). If `artworkCount` is 0 or
+  null, the works segment is omitted entirely; the index number and rule
+  still render, so the row's meta line never collapses to nothing.
+- `h2` (title), location/year line (omitted gracefully if either field
+  is null)
+- `tagline` if present, omitted entirely if null — no placeholder copy,
+  same rule as the collection detail page's `description`/statement
+  field (§20)
+- `VIEW COLLECTION →` link
+
+Cover column: exactly one `<img>`, `aspect-ratio: 3/2`, `object-fit: cover`,
+hotspot-driven `object-position` when set. `coverImage: null` (no upload
+yet) renders as a `--bg-secondary` panel with title/meta/link intact —
+the collection stays fully navigable with no image, rather than being
+dropped from the index. This guard lives in the GROQ projection —
+`"coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop})`
+— not in Zod — `CollectionSchema.coverImage` requires `asset`, so a half-populated
+image object would fail `safeParse` and silently drop the whole
+collection off the page if the null-check weren't done upstream in the
+query.
+
+### Rejected: work-thumbnail preview strip
+
+An earlier draft (matching a Figma-style reference) showed 1–2 work
+thumbnails per row alongside the cover. Rejected: individual works are
+already shown in full on the collection detail page one click away, so
+a preview strip duplicated content without adding information, and it
+reintroduced exactly the kind of fixed-slot-with-variable-content
+problem `storyPages[0]` already burned this project on once (§20) — a
+layout built for "always 2 thumbnails" breaks the moment a collection
+has 0 or 1. Cover-image-only avoids the problem outright rather than
+solving it.
+
+### Responsive
+
+`768–1023px`: single column, cover above text, alternation disabled.
+`<768px`: single column, cover full-width.
+
+### `/works` head alignment
+
+`.works-head` (in `WorksGallery.astro`, shared by `/works` and every
+`/works/[...filter]` route) gets `padding-left` at `>=700px` equal to
+the gallery's year-rail column width — computed as
+`calc(var(--rail-w) + var(--rail-gap))`, reusing the same custom
+properties `.year-group`'s `grid-template-columns` already consumes,
+not a new duplicate value. This aligns the eyebrow/h1 with the image
+column rather than the sticky year marker. Below 700px, where the rail
+splits into a single column, `.works-head` padding drops to 0 in the
+same media query — the two rules must stay on one shared breakpoint so
+they can't flip out of sync with each other.
+
+`.works-eyebrow` was also brought to the same `font-size`/`letter-spacing`
+as `.ci-eyebrow` (11px, 0.22em) — this was unintentional drift between
+two components doing the same visual job, not a deliberate difference,
+and is now a shared value. `.works-title`'s font-size clamp was
+deliberately left untouched — Works sits above a filter bar and dense
+grid and needs a smaller, denser heading than the Collections index,
+which has room for a larger editorial headline. Don't inflate one to
+match the other; align only the eyebrow.
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: 2026-08-13 — All Works page: taxonomy, routing, chip states, row packing, crop-ratio correction, mat treatment (§19); Collection Detail page: page head, intro, plates, lightbox, works section, prev/next (§20)*
+*Last updated: 2026-08-14 — Collections index rebuilt as editorial page
+head + alternating rows (§21); `/works` head alignment brought into
+token parity with Collections eyebrow (§21).*

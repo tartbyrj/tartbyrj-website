@@ -6,6 +6,91 @@
 
 ---
 
+## Session: 2026-08-14 — Collections index redesign, /works head alignment
+
+### Completed
+- `/collections` rebuilt as editorial index — see ARCHITECTURE.md §21 for
+  full spec. Eyebrow "COLLECTIONS", single-line h1 ("Where each collection
+  holds a moment lived"), alternating cover/text rows, cover-only (no
+  work-thumbnail preview — rejected, see §21), meta line singular/plural
+  work count, 0-count segment omitted gracefully
+- `COLLECTIONS_ALL_QUERY` added to queries.ts. `ARTWORK_TOTAL_QUERY` was
+  also added mid-session to power a draft "VIEW ALL WORKS" head-block
+  link, then removed in the same session once that link was cut in
+  favour of the existing nav WORKS item — queries.ts carries neither the
+  link nor the query today
+- `.works-head` (`WorksGallery.astro`) left-aligned to the gallery's
+  image column via `--rail-w` + `--rail-gap` (existing custom properties,
+  no new one added), dropping to 0 below 700px in the same media query
+  the rail itself uses
+- `.works-eyebrow` brought to parity with `.ci-eyebrow` (11px,
+  0.22em letter-spacing) — this was unintentional drift, not a design
+  choice, now shared
+- `.works-title` line-height/margin tightened to match `.ci-title`
+  rhythm; font-size clamp intentionally left alone (see §21 — Works
+  needs a denser heading than Collections' editorial one)
+
+### Decisions
+- Eyebrow "COLLECTIONS" not "COLLECTIONS & WORKS" — page indexes
+  collections only, no individual artwork appears on it, so the label
+  must not claim content it doesn't have
+- Work-thumbnail preview strip rejected — duplicates the detail page one
+  click away, and a fixed 1–2 slot layout breaks at 0 or 1 works, same
+  class of problem as `storyPages[0]` (§20)
+- Headline copy chosen to cover the full range of what "a collection" is
+  on this site — not just painting series, but community workshops and
+  mural documentation too — deliberately avoids "paintings"/"walls"
+  language
+- `.works-head` alignment target is the gallery image column, not an
+  arbitrary offset — anchored to `--rail-w`/`--rail-gap` so it can't
+  drift from the grid it's aligning to
+
+### Bugs / drift caught
+- `.works-eyebrow` vs `.ci-eyebrow` had silently diverged (10px/0.14em
+  vs 11px/0.22em) despite doing the same visual job on sibling pages —
+  not a deliberate difference, now unified
+- ARCHITECTURE.md §21, as drafted mid-session, described the
+  `ARTWORK_TOTAL_QUERY` cover-image GROQ guard and the query's removal
+  status inaccurately (wrong field name in the `select()` snippet; said
+  the query still existed with no consumer after it had already been
+  deleted). Caught and corrected before the doc was left as source of
+  truth — see §21's cover-image and page-head paragraphs for the
+  corrected text.
+
+### Rejected / Deferred
+- Work-thumbnail preview strip on collection rows — see Decisions above
+- Second head-block CTA ("VIEW ALL WORKS") — cut, nav already covers it
+
+### Not Verified
+- 700px breakpoint boundary, pixel-by-pixel (e.g. 690–710px) — both
+  `.works-head` padding and `.year-group`'s grid split share one
+  `min-width: 700px` query so they should flip atomically, but this
+  wasn't checked at the exact boundary, only at 440px and 1440px
+- `coverImage: null` row rendering — reviewed in code, not currently
+  visually exercised since both live collections now have real covers
+
+### Escalate
+- The "Rupiyoti" (should be "Rupjyoti") typo baked into deck pixels is
+  now visible on `/collections` index (cover thumbnail), not just the
+  detail-page lightbox as previously scoped in the 2026-08-13 entry.
+  This raises it from "blocks launch quality" to "currently live and
+  publicly visible on two pages" — bump priority on the deck re-export
+- Hotspot-math duplication: this session's `coverFocus()` (collections
+  index) duplicates the crop-relative hotspot correction already in
+  `workGeometry()` (homepage `index.astro`). Flagged, not consolidated —
+  this is the second occurrence of a pattern §19 already went through
+  once with `cropAdjustedAspectRatio`. Concrete trigger: consolidate the
+  next time any third file needs cover-image hotspot math, don't leave
+  this open-ended
+
+### Next Session Candidates
+- Deck re-export (typo + resolution) — see Escalate above, now higher
+  priority than previously scoped
+- Consolidate hotspot/crop correction logic if a third caller appears
+- Verify 700px breakpoint boundary in devtools
+
+---
+
 ## Session: 2026-08-13 (cont'd) — Collection detail page rebuild
 
 ### Completed
