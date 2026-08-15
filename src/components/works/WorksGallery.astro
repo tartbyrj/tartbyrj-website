@@ -528,10 +528,11 @@ const rootVars = [
   }
 
   @media (min-width: 700px) {
-    .works-head {
+    .works-head,
+    .filter-bar {
       /* Same rail width + gap the grid below spends on .year-group's first
-         column, so the eyebrow/h1 align with the row content rather than
-         the year markers. */
+         column, so the eyebrow, h1 and filter chips all align with the row
+         content rather than the year markers. */
       padding-left: calc(var(--rail-w) + var(--rail-gap));
     }
 

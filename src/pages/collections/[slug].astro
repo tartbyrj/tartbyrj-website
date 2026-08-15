@@ -28,16 +28,28 @@ export async function getStaticPaths() {
     'COLLECTION_NEIGHBOURS_QUERY'
   );
 
-  // Wrapping neighbours: the last collection's "next" is the first. With a
-  // single collection both are null and the whole section is skipped, rather
-  // than rendering two links that point back at the page you are already on.
-  return all.map(({ slug }, i) => ({
-    params: { slug },
-    props: {
-      prev: all.length > 1 ? all[(i - 1 + all.length) % all.length] : null,
-      next: all.length > 1 ? all[(i + 1) % all.length] : null,
-    },
-  }));
+  // Wrapping neighbours: the last collection's "next" is the first — but only
+  // once there are at least 3, since with exactly 2 that wrap makes prev and
+  // next resolve to the same other collection (both directions lead to the
+  // one other item). At n===2 neighbours therefore don't wrap: index 0 gets
+  // next only, index 1 gets prev only, so exactly one link renders per page
+  // instead of two identical ones. At n<=1 both are null and the whole
+  // section is skipped, rather than rendering a link back to the page you
+  // are already on.
+  return all.map(({ slug }, i) => {
+    const len = all.length;
+    if (len <= 1) return { params: { slug }, props: { prev: null, next: null } };
+    if (len === 2) {
+      return {
+        params: { slug },
+        props: { prev: i > 0 ? all[i - 1] : null, next: i < len - 1 ? all[i + 1] : null },
+      };
+    }
+    return {
+      params: { slug },
+      props: { prev: all[(i - 1 + len) % len], next: all[(i + 1) % len] },
+    };
+  });
 }
 
 interface Props {
@@ -213,16 +225,20 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       </section>
     )}
 
-    {prev && next && (
+    {(prev || next) && (
       <nav class="neighbours" aria-label="Other collections">
-        <a href={`/collections/${prev.slug}`} class="neighbour neighbour-prev">
-          <span class="neighbour-label">Previous</span>
-          <span class="neighbour-title">{prev.title}</span>
-        </a>
-        <a href={`/collections/${next.slug}`} class="neighbour neighbour-next">
-          <span class="neighbour-label">Next</span>
-          <span class="neighbour-title">{next.title}</span>
-        </a>
+        {prev && (
+          <a href={`/collections/${prev.slug}`} class="neighbour neighbour-prev">
+            <span class="neighbour-label">Previous</span>
+            <span class="neighbour-title">{prev.title}</span>
+          </a>
+        )}
+        {next && (
+          <a href={`/collections/${next.slug}`} class="neighbour neighbour-next">
+            <span class="neighbour-label">Next</span>
+            <span class="neighbour-title">{next.title}</span>
+          </a>
+        )}
       </nav>
     )}
   </div>
@@ -533,7 +549,6 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
 
   .neighbours {
     display: flex;
-    justify-content: space-between;
     gap: 24px;
     max-width: 1152px;
     margin: 0 auto;
@@ -552,6 +567,11 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
   .neighbour-next {
     text-align: right;
     align-items: flex-end;
+    /* Direction, not balance: this pins next to the right edge whether prev
+       is present or not, rather than relying on justify-content: space-between,
+       which only works with exactly two children and collapses a lone next to
+       the left when prev is absent (n===2 neighbours, see getStaticPaths). */
+    margin-left: auto;
   }
 
   .neighbour-label {
