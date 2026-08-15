@@ -115,6 +115,25 @@ body {
   }
 }
 
+/* Visually hidden, still announced. Used where an image carries baked-in type
+   that a screen reader cannot read — the collection deck cover on
+   /collections/[slug] renders its title and tagline this way above 768px, and
+   un-hides them below it, where the baked type is too small to read.
+   Both `clip` and `clip-path` are present on purpose: `clip` is deprecated but
+   is still the only one older Safari honours. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 /* Lives here, unscoped, on purpose: an Astro component's <style> compiles to
    a[data-astro-cid-…]:focus-visible, which matches only that component's own
    markup. Declared in Layout.astro it covered the nav and footer and silently

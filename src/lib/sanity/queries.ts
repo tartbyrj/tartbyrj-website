@@ -47,7 +47,37 @@ export const ARTWORK_BY_SLUG_QUERY = `
 // section on their own once a cover is uploaded in Studio.
 export const COLLECTIONS_INDEX_QUERY = `
 *[_type=="collection"&&defined(coverImage.asset)]|order(year desc)[0...4]{
-  title,slug,year,location,coverImage,
+  title,tagline,slug,year,location,coverImage,
+  "artworkCount":count(artworks)
+}
+`;
+
+// The /collections index. Distinct from COLLECTIONS_INDEX_QUERY above in three
+// ways, none of them cosmetic: no [0...4] cap (this page is the full index),
+// no defined(coverImage.asset) filter, and slug is left as the {current} object
+// so the result parses against CollectionSchema directly instead of needing a
+// page-local shape.
+//
+// Dropping the cover filter is the point of the page: the homepage section is a
+// hover-swapped image well, so a cover-less collection there reads as a broken
+// image, but this page is a list of every body of work — a row whose cover well
+// falls back to a flat --bg-secondary panel still carries its title, meta and
+// link, which is the row's actual job. Omitting it here would mean a collection
+// existed on the site with no page that lists it.
+//
+// select() with no fallback clause returns null, so coverImage is either null
+// or an object with a real asset — never the half-populated shape that would
+// fail CollectionSchema's required `asset` and cost the whole row. The guard
+// belongs in the query, where failing is cheap, not in Zod, where a single
+// malformed image would drop a collection off the index entirely (§19).
+//
+// defined(slug.current) matches COLLECTION_NEIGHBOURS_QUERY: every row here
+// links to /collections/<slug>, and that route is only built for collections
+// with a slug. Without this, a slug-less draft ships a link to a 404.
+export const COLLECTIONS_ALL_QUERY = `
+*[_type=="collection"&&defined(slug.current)]|order(year desc){
+  title,tagline,slug,year,location,
+  "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop}),
   "artworkCount":count(artworks)
 }
 `;
@@ -84,9 +114,22 @@ export const HOMEPAGE_WORKS_QUERY = `
 }
 `;
 
+// Every collection, title and slug only, in the same year-desc order the
+// /collections index uses. Two jobs on /collections/[slug]: it generates the
+// static paths, and the same array position that produced a path also yields
+// that page's prev/next neighbours. One fetch, one ordering — a separate
+// slugs-only query would be free to disagree with this one about which
+// collections exist, and the prev/next links would point at pages that were
+// never built.
+export const COLLECTION_NEIGHBOURS_QUERY = `
+*[_type=="collection"&&defined(slug.current)]|order(year desc){
+  title,"slug":slug.current
+}
+`;
+
 export const COLLECTION_BY_SLUG_QUERY = `
 *[_type=="collection"&&slug.current==$slug][0]{
-  title,slug,year,location,description,
+  title,tagline,slug,year,location,description,
   coverImage,storyPages,
   artworks[]->{title,slug,image,medium,year,altText}
 }

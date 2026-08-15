@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const CollectionSchema = z.object({
   title: z.string(),
+  tagline: z.string().nullish(),
   slug: z.object({ current: z.string() }),
   year: z.number().nullish(),
   location: z.string().nullish(),

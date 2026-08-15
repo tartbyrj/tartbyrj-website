@@ -261,8 +261,17 @@ seo            object        { metaTitle, metaDescription, ogImage }
 ### `collection` (series grouping)
 ```
 title          string        required
+tagline        string        optional, max 80 — the line under the title
+                              on the deck's cover page. Renders on the
+                              collection intro. Leave blank if it would
+                              only restate the title.
 slug           slug
-description    text
+description    text          "Statement" in Studio — a short transcribed
+                              pull quote, max 240 / min 60 (warning).
+                              Renders as a blockquote if present; the
+                              section is omitted entirely if null. Not a
+                              prose paragraph — the decks contain no
+                              descriptive paragraph and none is expected.
 heroImage      image         hotspot enabled
 year           number
 artworkCount   (computed)    via GROQ
@@ -1053,7 +1062,134 @@ dev server is restarted by hand.
 
 ---
 
+## 20. Collection Detail Page
+
+### Structure (locked)
+
+`/collections/[slug]` renders five parts in order: page head (back link +
+intro), statement, story-page plates, works in this collection, prev/next
+collection.
+
+### Page head
+
+`.back-link` and `.intro` are siblings inside `.page-head`
+(`max-width: 1152px`, centered, `padding: 0 24px`) — the single ancestor
+carrying horizontal inset. Neither child sets its own left padding, so
+their left edges are structurally identical rather than independently
+tuned to match.
+
+`.back-link` is normal document flow, not `position: absolute`. It was
+originally absolute-positioned to float over a full-bleed cover photo;
+that cover section no longer exists (see "Rejected: cover as storyPages[0]"
+below), so nothing conflicts with normal flow. `--nav-h` clearance comes
+from `.collection-detail`'s existing `padding-top`, not from a hand-tuned
+`top` offset. The same pill treatment (scrim, blur, border, hover) is
+reused verbatim on `/works/[slug]` as "Back to All Works" — one visual
+component, two instances.
+
+### Intro
+
+Eyebrow (`ARCHIVE COLLECTION · {location}, {year}`, omitting either field
+gracefully if null) → `h1` (`title`) → `tagline` if present
+(`--font-serif` italic, `--text-secondary`, `max-width: 48ch`). Top
+padding is `calc(var(--space-section) / 2)` — half the standard section
+gap, since this is a page-open block sitting directly under a page head,
+not a boundary between two major sections.
+
+### Rejected: cover as storyPages[0]
+
+The original spec treated `storyPages[0]` as a full-viewport splash —
+title, tagline, artist name baked into the image, `object-fit: contain`,
+`sr-only` HTML heading duplicated underneath for mobile. Dropped for two
+reasons:
+
+1. **RJ removed the splash page from this deck** (it duplicated the About
+   page's artist bio) — `storyPages[0]` became an interior content page
+   ("Observation," a numbered field-notes spread), rendered full-viewport
+   as if it were an entrance. Wrong page doing the wrong job, at the
+   largest size on the site.
+2. Even where a splash page exists, depending on its *position in an
+   externally-authored array* to drive page layout is fragile by
+   construction — confirmed within one session, when the same deck also
+   surfaced a name typo baked into pixels ("Rupiyoti" vs. "Rupjyoti") that
+   the site had no way to catch.
+
+Cover is now built from Sanity fields (`title`, `tagline`, `location`,
+`year`) instead of an image. This is what `tagline` was added for — see
+section 5. The `storyPages` array is presentation-neutral: RJ can
+reorder, add, or remove deck pages without any layout consequence. Plates
+render `storyPages[0]` onward, numbered `01 / N` through `N / N`.
+
+### Statement
+
+Renders only if `description` is non-empty — no wrapper, no placeholder
+copy, if null. Set as a `blockquote`, centered, `--font-serif` italic,
+`clamp(24px, 3.4vw, 34px)`, `max-width: 24ch`, vertical padding
+`clamp(48px, 6vh, 96px)` (reduced from an initial `clamp(80px, 12vh,
+160px)` — the larger value, combined with the intro's own padding and the
+gap before the first plate, stacked into three large gaps in a row for
+what is often two lines of type).
+
+`description` (labelled "Statement" in Studio) is a short transcribed
+pull quote, not a paragraph — see section 5. These decks contain no
+descriptive-paragraph page and are not expected to gain one; where a good
+line exists (handwritten marginalia, a fragment from a title page), it's
+transcribed here rather than left to decorative-only use in the source
+image.
+
+### Plates
+
+Each `storyPage` renders exactly one `<img>`. Container
+`max-width: min(1100px, 92vw)`, `max-height: 82vh`, `object-fit: contain`,
+centered on `--bg-primary`, vertical gap `clamp(72px, 10vh, 140px)`. The
+constrained width is the core departure from the original full-bleed
+stack: margin around a page reads as a plate in a monograph rather than a
+slide in a deck. All images `loading="lazy"` — no plate is above the
+fold on any viewport, so eager loading (attempted in an earlier pass) was
+pure waste. `fit=max` on every `urlFor()` call in this file caps delivery
+at the source image's native resolution instead of upscaling past it;
+source decks are currently 1920×1080, so `w=2400`/`w=3200` requests were
+transferring up to 84% more bytes for zero additional detail before this
+was added.
+
+Below 768px, plates are hidden via CSS but remain in the DOM; a single
+button ("View collection — N pages") opens the lightbox at index 0. A
+`noscript` rule reveals the plates for no-JS visitors.
+
+### Lightbox
+
+Native `<dialog>`, no library. Images at `w=3200&fit=max`, fetched only
+on open, never preloaded. Arrow keys, Escape, backdrop click, touch
+swipe. Focus trapped while open, returned to the trigger on close.
+Transitions disabled under `prefers-reduced-motion`.
+
+### Works in this collection
+
+Section separator (`border-top`, eyebrow, per section 17's pattern) is
+unconditional — it renders at any work count, including one, so the
+transition out of the plate sequence is always visually marked rather
+than depending on there being enough items to justify a heading. This
+was a shipped bug, not a design choice: at one work, an earlier version
+suppressed both the heading and the separator, and the lone work card
+read as an unlabelled continuation of the deck rather than a new section
+— indistinguishable from a 17th plate. A `/works` link ("View all works")
+fills the section head's secondary slot unconditionally.
+
+Work thumbnail links use `alt=""` — the link already carries the
+artwork's title as visible text; descriptive alt would double it, per
+section 8.
+
+### Prev / next collection
+
+Computed in `getStaticPaths()` via `COLLECTION_NEIGHBOURS_QUERY`
+(title + slug, `year desc`), which also supplies the paths themselves —
+replacing a separate slugs-only query so the generated routes and the
+neighbour links can't disagree about which collections exist. Section is
+skipped entirely with only one collection.
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: 2026-08-13 — All Works page: taxonomy, routing, chip states, row packing, crop-ratio correction, mat treatment (§19)*
+*Last updated: 2026-08-13 — All Works page: taxonomy, routing, chip states, row packing, crop-ratio correction, mat treatment (§19); Collection Detail page: page head, intro, plates, lightbox, works section, prev/next (§20)*

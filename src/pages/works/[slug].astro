@@ -83,7 +83,7 @@ const meta = [artwork.year, artwork.medium, artwork.dimensions].filter(Boolean).
         <p class="detail-price">${artwork.price.toLocaleString('en-US')}</p>
       )}
 
-      <a class="detail-back" href="/works">← All works</a>
+      <a class="detail-back" href="/works">← Back to All Works</a>
     </div>
   </div>
 </Layout>
@@ -174,19 +174,28 @@ const meta = [artwork.year, artwork.medium, artwork.dimensions].filter(Boolean).
     margin: 22px 0 0;
   }
 
+  /* Pill treatment matches .back-link on /collections/[slug].astro — same
+     scrim/blur/border/hover, same shape. Normal flow here too: this page
+     never pulled it out of flow, so unlike that page's back-link there was
+     no absolute-positioning history to undo. */
   .detail-back {
     display: inline-block;
     margin-top: 46px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-secondary);
+    font-size: 13px;
+    letter-spacing: 0.04em;
     text-decoration: none;
-    transition: color var(--dur-base) ease;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease;
   }
 
   .detail-back:hover {
     color: var(--accent);
+    border-color: var(--accent-dim);
   }
 
   @media (max-width: 900px) {

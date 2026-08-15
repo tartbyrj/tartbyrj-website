@@ -320,14 +320,19 @@ const rootVars = [
     padding-inline: var(--gutter);
   }
 
+  /* padding-left at >=700px is added in the .year-group breakpoint below —
+     it reuses --rail-w/--rail-gap directly rather than a third custom
+     property, so eyebrow/h1 can't drift from the rail the grid actually
+     renders. Unset here (0) below 700px, where .year-group drops the rail
+     split entirely. */
   .works-head {
     padding-top: calc(var(--nav-h) + 40px);
   }
 
   .works-eyebrow {
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.22em;
     color: var(--text-secondary);
     margin: 0;
   }
@@ -340,9 +345,9 @@ const rootVars = [
     font-family: var(--font-serif);
     font-weight: 300;
     font-size: clamp(28px, 4vw, 44px);
-    line-height: 1.1;
+    line-height: 1;
     color: var(--text-primary);
-    margin: 10px 0 0;
+    margin: 0;
   }
 
   /* Real links, not buttons — each filter is a page, so back, bookmarking and
@@ -523,6 +528,13 @@ const rootVars = [
   }
 
   @media (min-width: 700px) {
+    .works-head {
+      /* Same rail width + gap the grid below spends on .year-group's first
+         column, so the eyebrow/h1 align with the row content rather than
+         the year markers. */
+      padding-left: calc(var(--rail-w) + var(--rail-gap));
+    }
+
     .year-group {
       grid-template-columns: var(--rail-w) 1fr;
       gap: var(--rail-gap);

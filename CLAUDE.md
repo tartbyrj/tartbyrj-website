@@ -48,7 +48,7 @@ Plan:        Free
 | File | Type | Key fields |
 |---|---|---|
 | `artwork.ts` | document | title, slug, image (hotspot), year, medium, dimensions, available, price, collection (ref), featured, altText |
-| `collection.ts` | document | title, slug, year, location, description, coverImage, storyPages[], artworks[] (refs), seo |
+| `collection.ts` | document | title, tagline, slug, year, location, description ("Statement" — short pull quote transcribed from the deck, not a prose paragraph), coverImage, storyPages[], artworks[] (refs), seo |
 | `index.ts` | — | exports schemaTypes = [artwork, collection] |
 
 ### GROQ Queries (src/lib/sanity/queries.ts)
@@ -57,6 +57,9 @@ Plan:        Free
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
 - `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
+- `COLLECTION_NEIGHBOURS_QUERY` — title + slug for every collection, order
+  year desc. Feeds getStaticPaths on collections/[slug] and the prev/next
+  links, so routes and neighbour data can't drift apart.
 - `ABOUT_QUERY` — aboutPage singleton. **Always returns `null`** — `aboutPage`
   isn't a registered schema (see ARCHITECTURE.md §5), so no such document can
   exist in Studio yet. The About page runs on hardcoded local content instead.
@@ -222,6 +225,7 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - Never skip `alt` text on artwork images
 - Never defer the theme init script — must be inline in `<head>`
 - Never render the same Sanity image twice in markup to serve different breakpoints — reposition one `<img>` with CSS instead
+- Never derive collection-detail layout from the position or content of a storyPages array element — Sanity fields (title, tagline, location, year) drive the cover; storyPages is presentation-neutral content RJ can reorder freely. See ARCHITECTURE.md section 20.
 
 ---
 

@@ -6,6 +6,99 @@
 
 ---
 
+## Session: 2026-08-13 (cont'd) — Collection detail page rebuild
+
+### Completed
+- `src/pages/collections/[slug].astro` fully rebuilt: page head (in-flow
+  back-link pill + intro), statement (conditional pull quote), story-page
+  plates (contained, not full-bleed), works section (unconditional
+  separator + "View all works" link), prev/next collection
+- Cover changed from `storyPages[0]` full-viewport image to
+  Sanity-field-driven intro (title, tagline, location, year) — see
+  rejection note below
+- `tagline` schema field added to `collection.ts`; `description` field
+  repurposed as "Statement" (short transcribed pull quote, not prose),
+  `max(240)` error / `min(60)` warning
+- `COLLECTION_NEIGHBOURS_QUERY` added, feeds both `getStaticPaths` and
+  prev/next links from one source
+- `fit=max` added to every `urlFor()` call site in the file (cover,
+  plates, lightbox, works thumb) — caps delivery at native source width
+  instead of upscaling; measured saving up to 84% per lightbox image
+  against current 1920×1080 source assets
+- All plate images set to `loading="lazy"` (no plate is ever above the
+  fold, on any viewport — eager was dead weight)
+- Works section separator now unconditional at any work count, fixing a
+  real bug: at 1 work, the lone card previously read as an unlabelled
+  17th deck page with no section break
+- "Back to All Works" pill added to `works/[slug].astro`, same component
+  as collection's back-link, in-flow (not absolute)
+- ARCHITECTURE.md §20 written (Collection Detail Page); §5 collection
+  schema block updated; CLAUDE.md GROQ list + "What NOT to Do" updated
+
+### Decisions
+- **Cover is built from Sanity fields, not `storyPages[0]`.** Original
+  spec treated the first deck page as a full-viewport splash. Rejected
+  after RJ removed the splash page from this deck (duplicated the About
+  page's bio) — `storyPages[0]` became an interior page ("Observation")
+  rendered as if it were the entrance. Deeper reason: depending on layout
+  on the position of an externally-authored array is fragile by
+  construction, independent of this one incident — the same deck also had
+  the artist's name misspelled ("Rupiyoti" vs. "Rupjyoti") baked into
+  pixels with no way for the site to catch it. `tagline` exists
+  specifically to make this possible.
+- **`description` redefined as a short transcribed pull quote, not a
+  prose paragraph.** The decks contain no descriptive-paragraph page and
+  none is expected — RJ writes narrative into the Canva pages, not into
+  Sanity. Where good marginalia exists on a cover page, transcribe it
+  here rather than leave it decorative-only.
+- **Statement/intro padding reduced** (statement:
+  `clamp(80px,12vh,160px)` → `clamp(48px,6vh,96px)`; intro top:
+  `--space-section` → half) — three max-value gaps were stacking in a row
+  for what's often two lines of type.
+- **Back-link pattern** (scrim/blur/pill, in-flow, no absolute positioning)
+  is now one shared visual component used on both collection and work
+  detail pages.
+
+### Rejected / Deferred
+- Cover-as-`storyPages[0]` full-bleed splash — rejected, see Decisions
+- Mobile horizontal swipe carousel for plates — rejected earlier in
+  session in favor of gated single-button reveal into the lightbox
+- Restoring the deck's title/splash page to fix the cover — rejected;
+  moving to Sanity fields removes the dependency entirely rather than
+  patching around it
+
+### Not Verified
+- Deck re-export (typo fix "Rupiyoti"→"Rupjyoti", 3840×2160 resolution)
+  — not done this session, explicitly deferred by user. Site is
+  currently live with the misspelled name baked into deck pixels and
+  under-resolved source assets (1920×1080) against a lightbox spec'd for
+  ~2400–3200px. `fit=max` prevents upscaling waste but doesn't fix
+  softness at the lightbox's target size.
+- Whether other collections' decks have the same name-spelling issue —
+  not checked
+- Works-section separator's `count >= 2` branch — not exercised by
+  current data (only one collection has any works, and it has exactly
+  one). Code is a one-line conditional on an already-iterated array;
+  low risk, flagged not fixed.
+
+### Next Session Candidates
+- Deck re-export: fix name spelling, re-export at 3840×2160, re-upload
+  — blocks real launch quality, not code
+- Populate `description` (statement) and `tagline` for collections that
+  don't have them yet
+- `transforming-walls-into-stories` collection has zero linked works —
+  SEO-dead per earlier discussion; needs artwork documents created from
+  its deck's paintings, same as the standing recommendation for
+  `worlds-within-walls`
+- Check `coverImage` (used on `/collections` index) vs. `storyPages[0]`
+  (no longer used, but still uploaded) for the same collection — are
+  they meant to be the same asset? Not reconciled this session, was
+  explicitly deferred
+- Confirm the `count >= 2` works-heading branch on a collection with 2+
+  works, whenever one exists
+
+---
+
 ## Session: 2026-08-11
 
 ### Completed
