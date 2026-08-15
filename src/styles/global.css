@@ -115,10 +115,9 @@ body {
   }
 }
 
-/* Visually hidden, still announced. Used where an image carries baked-in type
-   that a screen reader cannot read — the collection deck cover on
-   /collections/[slug] renders its title and tagline this way above 768px, and
-   un-hides them below it, where the baked type is too small to read.
+/* Visually hidden, still announced by screen readers — for content that
+   exists to satisfy accessibility (e.g. text baked into an image's pixels
+   that a screen reader can't read) without also appearing on screen.
    Both `clip` and `clip-path` are present on purpose: `clip` is deprecated but
    is still the only one older Safari honours. */
 .sr-only {

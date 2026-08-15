@@ -1,5 +1,4 @@
 ---
-import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
 import { parseList } from '../../lib/sanity/parse';
@@ -7,10 +6,19 @@ import {
   COLLECTION_BY_SLUG_QUERY,
   COLLECTION_NEIGHBOURS_QUERY,
 } from '../../lib/sanity/queries';
-import { CollectionSchema } from '../../types/collection';
+import {
+  CollectionNeighbourSchema,
+  CollectionSchema,
+  type Collection,
+  type CollectionNeighbour,
+} from '../../types/collection';
 
-const NeighbourSchema = z.object({ title: z.string(), slug: z.string() });
-type Neighbour = z.infer<typeof NeighbourSchema>;
+type CollectionArtwork = NonNullable<NonNullable<Collection['artworks']>[number]>;
+// Narrowed shape after the filter below: slug is confirmed present, so the
+// template can read artwork.slug.current without an extra guard per access.
+type LinkableArtwork = CollectionArtwork & { slug: { current: string } };
+
+type Neighbour = CollectionNeighbour;
 
 export async function getStaticPaths() {
   const raw = await client.fetch(COLLECTION_NEIGHBOURS_QUERY).catch((error: unknown) => {
@@ -22,11 +30,7 @@ export async function getStaticPaths() {
     return null;
   });
 
-  const all = parseList(
-    z.object({ title: z.string(), slug: z.string() }),
-    raw,
-    'COLLECTION_NEIGHBOURS_QUERY'
-  );
+  const all = parseList(CollectionNeighbourSchema, raw, 'COLLECTION_NEIGHBOURS_QUERY');
 
   // Wrapping neighbours: the last collection's "next" is the first — but only
   // once there are at least 3, since with exactly 2 that wrap makes prev and
@@ -112,7 +116,7 @@ const eyebrowMeta = [collection.location, collection.year].filter(Boolean).join(
 const eyebrow = eyebrowMeta ? `Archive Collection · ${eyebrowMeta}` : 'Archive Collection';
 
 const artworks = (collection.artworks ?? []).filter(
-  (artwork: any) => artwork?.slug?.current
+  (artwork): artwork is LinkableArtwork => Boolean(artwork?.slug?.current)
 );
 
 /* ── Meta ───────────────────────────────────────────────────────────────────
@@ -200,7 +204,7 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
           {/* A reference to a deleted or unpublished artwork dereferences to
               null, which would crash the build on artwork.slug.current — the
               filter above drops those before they get here. */}
-          {artworks.map((artwork: any) => (
+          {artworks.map((artwork) => (
             <a href={`/works/${artwork.slug.current}`} class="work-link">
               {/* alt="" is deliberate: the link already carries the title as
                   visible text below, and descriptive alt here would make a
