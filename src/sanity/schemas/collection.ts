@@ -12,6 +12,14 @@ export default defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
+      name: 'tagline',
+      title: 'Tagline',
+      description:
+        "The line under the title on the deck's cover page. One line that makes someone want to see the collection. Leave blank if it would only restate the title.",
+      type: 'string',
+      validation: (Rule) => Rule.max(80),
+    }),
+    defineField({
       name: 'slug',
       title: 'Slug',
       type: 'slug',
@@ -33,8 +41,15 @@ export default defineType({
     }),
     defineField({
       name: 'description',
-      title: 'Description',
+      title: 'Statement',
+      description:
+        'A short pull quote, transcribed from the deck. This is the only indexable prose on the collection page. One or two sentences, not a paragraph.',
       type: 'text',
+      rows: 3,
+      validation: (Rule) => [
+        Rule.max(240).error('Keep this to one or two sentences — the deck has no room for a paragraph.'),
+        Rule.min(60).warning('Short for a pull quote — double-check this is transcribed from the deck, not a fragment.'),
+      ],
     }),
     // Required because the homepage collections index filters on
     // defined(coverImage.asset) — a cover-less collection silently drops out of

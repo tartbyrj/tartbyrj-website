@@ -6,6 +6,184 @@
 
 ---
 
+## Session: 2026-08-14 — Collections index redesign, /works head alignment
+
+### Completed
+- `/collections` rebuilt as editorial index — see ARCHITECTURE.md §21 for
+  full spec. Eyebrow "COLLECTIONS", single-line h1 ("Where each collection
+  holds a moment lived"), alternating cover/text rows, cover-only (no
+  work-thumbnail preview — rejected, see §21), meta line singular/plural
+  work count, 0-count segment omitted gracefully
+- `COLLECTIONS_ALL_QUERY` added to queries.ts. `ARTWORK_TOTAL_QUERY` was
+  also added mid-session to power a draft "VIEW ALL WORKS" head-block
+  link, then removed in the same session once that link was cut in
+  favour of the existing nav WORKS item — queries.ts carries neither the
+  link nor the query today
+- `.works-head` (`WorksGallery.astro`) left-aligned to the gallery's
+  image column via `--rail-w` + `--rail-gap` (existing custom properties,
+  no new one added), dropping to 0 below 700px in the same media query
+  the rail itself uses
+- `.works-eyebrow` brought to parity with `.ci-eyebrow` (11px,
+  0.22em letter-spacing) — this was unintentional drift, not a design
+  choice, now shared
+- `.works-title` line-height/margin tightened to match `.ci-title`
+  rhythm; font-size clamp intentionally left alone (see §21 — Works
+  needs a denser heading than Collections' editorial one)
+
+### Decisions
+- Eyebrow "COLLECTIONS" not "COLLECTIONS & WORKS" — page indexes
+  collections only, no individual artwork appears on it, so the label
+  must not claim content it doesn't have
+- Work-thumbnail preview strip rejected — duplicates the detail page one
+  click away, and a fixed 1–2 slot layout breaks at 0 or 1 works, same
+  class of problem as `storyPages[0]` (§20)
+- Headline copy chosen to cover the full range of what "a collection" is
+  on this site — not just painting series, but community workshops and
+  mural documentation too — deliberately avoids "paintings"/"walls"
+  language
+- `.works-head` alignment target is the gallery image column, not an
+  arbitrary offset — anchored to `--rail-w`/`--rail-gap` so it can't
+  drift from the grid it's aligning to
+
+### Bugs / drift caught
+- `.works-eyebrow` vs `.ci-eyebrow` had silently diverged (10px/0.14em
+  vs 11px/0.22em) despite doing the same visual job on sibling pages —
+  not a deliberate difference, now unified
+- ARCHITECTURE.md §21, as drafted mid-session, described the
+  `ARTWORK_TOTAL_QUERY` cover-image GROQ guard and the query's removal
+  status inaccurately (wrong field name in the `select()` snippet; said
+  the query still existed with no consumer after it had already been
+  deleted). Caught and corrected before the doc was left as source of
+  truth — see §21's cover-image and page-head paragraphs for the
+  corrected text.
+
+### Rejected / Deferred
+- Work-thumbnail preview strip on collection rows — see Decisions above
+- Second head-block CTA ("VIEW ALL WORKS") — cut, nav already covers it
+
+### Not Verified
+- 700px breakpoint boundary, pixel-by-pixel (e.g. 690–710px) — both
+  `.works-head` padding and `.year-group`'s grid split share one
+  `min-width: 700px` query so they should flip atomically, but this
+  wasn't checked at the exact boundary, only at 440px and 1440px
+- `coverImage: null` row rendering — reviewed in code, not currently
+  visually exercised since both live collections now have real covers
+
+### Escalate
+- The "Rupiyoti" (should be "Rupjyoti") typo baked into deck pixels is
+  now visible on `/collections` index (cover thumbnail), not just the
+  detail-page lightbox as previously scoped in the 2026-08-13 entry.
+  This raises it from "blocks launch quality" to "currently live and
+  publicly visible on two pages" — bump priority on the deck re-export
+- Hotspot-math duplication: this session's `coverFocus()` (collections
+  index) duplicates the crop-relative hotspot correction already in
+  `workGeometry()` (homepage `index.astro`). Flagged, not consolidated —
+  this is the second occurrence of a pattern §19 already went through
+  once with `cropAdjustedAspectRatio`. Concrete trigger: consolidate the
+  next time any third file needs cover-image hotspot math, don't leave
+  this open-ended
+
+### Next Session Candidates
+- Deck re-export (typo + resolution) — see Escalate above, now higher
+  priority than previously scoped
+- Consolidate hotspot/crop correction logic if a third caller appears
+- Verify 700px breakpoint boundary in devtools
+
+---
+
+## Session: 2026-08-13 (cont'd) — Collection detail page rebuild
+
+### Completed
+- `src/pages/collections/[slug].astro` fully rebuilt: page head (in-flow
+  back-link pill + intro), statement (conditional pull quote), story-page
+  plates (contained, not full-bleed), works section (unconditional
+  separator + "View all works" link), prev/next collection
+- Cover changed from `storyPages[0]` full-viewport image to
+  Sanity-field-driven intro (title, tagline, location, year) — see
+  rejection note below
+- `tagline` schema field added to `collection.ts`; `description` field
+  repurposed as "Statement" (short transcribed pull quote, not prose),
+  `max(240)` error / `min(60)` warning
+- `COLLECTION_NEIGHBOURS_QUERY` added, feeds both `getStaticPaths` and
+  prev/next links from one source
+- `fit=max` added to every `urlFor()` call site in the file (cover,
+  plates, lightbox, works thumb) — caps delivery at native source width
+  instead of upscaling; measured saving up to 84% per lightbox image
+  against current 1920×1080 source assets
+- All plate images set to `loading="lazy"` (no plate is ever above the
+  fold, on any viewport — eager was dead weight)
+- Works section separator now unconditional at any work count, fixing a
+  real bug: at 1 work, the lone card previously read as an unlabelled
+  17th deck page with no section break
+- "Back to All Works" pill added to `works/[slug].astro`, same component
+  as collection's back-link, in-flow (not absolute)
+- ARCHITECTURE.md §20 written (Collection Detail Page); §5 collection
+  schema block updated; CLAUDE.md GROQ list + "What NOT to Do" updated
+
+### Decisions
+- **Cover is built from Sanity fields, not `storyPages[0]`.** Original
+  spec treated the first deck page as a full-viewport splash. Rejected
+  after RJ removed the splash page from this deck (duplicated the About
+  page's bio) — `storyPages[0]` became an interior page ("Observation")
+  rendered as if it were the entrance. Deeper reason: depending on layout
+  on the position of an externally-authored array is fragile by
+  construction, independent of this one incident — the same deck also had
+  the artist's name misspelled ("Rupiyoti" vs. "Rupjyoti") baked into
+  pixels with no way for the site to catch it. `tagline` exists
+  specifically to make this possible.
+- **`description` redefined as a short transcribed pull quote, not a
+  prose paragraph.** The decks contain no descriptive-paragraph page and
+  none is expected — RJ writes narrative into the Canva pages, not into
+  Sanity. Where good marginalia exists on a cover page, transcribe it
+  here rather than leave it decorative-only.
+- **Statement/intro padding reduced** (statement:
+  `clamp(80px,12vh,160px)` → `clamp(48px,6vh,96px)`; intro top:
+  `--space-section` → half) — three max-value gaps were stacking in a row
+  for what's often two lines of type.
+- **Back-link pattern** (scrim/blur/pill, in-flow, no absolute positioning)
+  is now one shared visual component used on both collection and work
+  detail pages.
+
+### Rejected / Deferred
+- Cover-as-`storyPages[0]` full-bleed splash — rejected, see Decisions
+- Mobile horizontal swipe carousel for plates — rejected earlier in
+  session in favor of gated single-button reveal into the lightbox
+- Restoring the deck's title/splash page to fix the cover — rejected;
+  moving to Sanity fields removes the dependency entirely rather than
+  patching around it
+
+### Not Verified
+- Deck re-export (typo fix "Rupiyoti"→"Rupjyoti", 3840×2160 resolution)
+  — not done this session, explicitly deferred by user. Site is
+  currently live with the misspelled name baked into deck pixels and
+  under-resolved source assets (1920×1080) against a lightbox spec'd for
+  ~2400–3200px. `fit=max` prevents upscaling waste but doesn't fix
+  softness at the lightbox's target size.
+- Whether other collections' decks have the same name-spelling issue —
+  not checked
+- Works-section separator's `count >= 2` branch — not exercised by
+  current data (only one collection has any works, and it has exactly
+  one). Code is a one-line conditional on an already-iterated array;
+  low risk, flagged not fixed.
+
+### Next Session Candidates
+- Deck re-export: fix name spelling, re-export at 3840×2160, re-upload
+  — blocks real launch quality, not code
+- Populate `description` (statement) and `tagline` for collections that
+  don't have them yet
+- `transforming-walls-into-stories` collection has zero linked works —
+  SEO-dead per earlier discussion; needs artwork documents created from
+  its deck's paintings, same as the standing recommendation for
+  `worlds-within-walls`
+- Check `coverImage` (used on `/collections` index) vs. `storyPages[0]`
+  (no longer used, but still uploaded) for the same collection — are
+  they meant to be the same asset? Not reconciled this session, was
+  explicitly deferred
+- Confirm the `count >= 2` works-heading branch on a collection with 2+
+  works, whenever one exists
+
+---
+
 ## Session: 2026-08-11
 
 ### Completed

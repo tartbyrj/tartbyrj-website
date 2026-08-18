@@ -67,8 +67,8 @@ function coverSrcSet(cover: NonNullable<Collection['coverImage']>): string {
 // therefore carries its own placement values: --gr is the shared grid row on
 // tablet, --oi/--or are the flex orders that stack them on mobile.
 const rows = collections.map((collection, i) => {
-  // location is .nullish() and artworkCount .optional() — build the line from
-  // what exists so a missing field never leaves a dangling separator.
+  // location and artworkCount are both .nullish() — build the line from what
+  // exists so a missing field never leaves a dangling separator.
   const meta: string[] = [];
   if (collection.year != null) meta.push(String(collection.year));
   if (collection.location) meta.push(collection.location);

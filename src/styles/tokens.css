@@ -41,6 +41,13 @@
   /* Hero fallback (shown when no featured artwork image) */
   --hero-fallback: linear-gradient(160deg, #f5f0ea, #d4c4b0);
 
+  /* Lightbox backdrop (collection deck viewer, /collections/[slug]).
+     Near-opaque and theme-matched rather than the conventional black: a
+     deck page is judged against one constant neutral ground, same argument
+     as §17's background rule. It is also what makes the object-fit: contain
+     letterboxing invisible instead of reading as a framing choice. */
+  --lightbox-backdrop: rgba(250, 247, 244, 0.97);
+
   /* Availability status */
   --available:     #4a6b4f;
   --available-dim: rgba(74, 107, 79, 0.14);
@@ -118,6 +125,9 @@
 
   /* Hero fallback (shown when no featured artwork image) */
   --hero-fallback: linear-gradient(160deg, #1c1815, #2b2119);
+
+  /* Lightbox backdrop — see the light-theme note above. */
+  --lightbox-backdrop: rgba(8, 7, 6, 0.97);
 
   /* Availability status */
   --available:     #8fb894;

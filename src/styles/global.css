@@ -115,6 +115,24 @@ body {
   }
 }
 
+/* Visually hidden, still announced by screen readers — for content that
+   exists to satisfy accessibility (e.g. text baked into an image's pixels
+   that a screen reader can't read) without also appearing on screen.
+   Both `clip` and `clip-path` are present on purpose: `clip` is deprecated but
+   is still the only one older Safari honours. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 /* Lives here, unscoped, on purpose: an Astro component's <style> compiles to
    a[data-astro-cid-…]:focus-visible, which matches only that component's own
    markup. Declared in Layout.astro it covered the nav and footer and silently

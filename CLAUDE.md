@@ -48,7 +48,7 @@ Plan:        Free
 | File | Type | Key fields |
 |---|---|---|
 | `artwork.ts` | document | title, slug, image (hotspot), year, medium, dimensions, available, price, collection (ref), featured, altText |
-| `collection.ts` | document | title, slug, year, location, description, coverImage, storyPages[], artworks[] (refs), seo |
+| `collection.ts` | document | title, tagline, slug, year, location, description ("Statement" — short pull quote transcribed from the deck, not a prose paragraph), coverImage, storyPages[], artworks[] (refs), seo |
 | `index.ts` | — | exports schemaTypes = [artwork, collection] |
 
 ### GROQ Queries (src/lib/sanity/queries.ts)
@@ -56,7 +56,18 @@ Plan:        Free
 - `ALL_ARTWORKS_QUERY` — all artworks, order year desc
 - `ARTWORK_BY_SLUG_QUERY` — single artwork, dereferences collection→{title,slug}
 - `COLLECTIONS_INDEX_QUERY` — homepage section 2, limit 4, includes artworkCount
+- `COLLECTIONS_ALL_QUERY` — /collections index, no limit, order year desc,
+  includes tagline + artworkCount. Separate from COLLECTIONS_INDEX_QUERY
+  above (that one caps at 4 for the homepage).
+- `ARTWORK_TOTAL_QUERY` — not in this file. It was drafted
+  (count(*[_type=="artwork" && defined(slug.current)])) to power a
+  /collections head-block "VIEW ALL WORKS" link, then removed along with
+  that link in the same session once it was cut in favour of the nav's
+  WORKS item. Note left here so it isn't re-added without a real consumer.
 - `COLLECTION_BY_SLUG_QUERY` — single collection, dereferences artworks[]
+- `COLLECTION_NEIGHBOURS_QUERY` — title + slug for every collection, order
+  year desc. Feeds getStaticPaths on collections/[slug] and the prev/next
+  links, so routes and neighbour data can't drift apart.
 - `ABOUT_QUERY` — aboutPage singleton. **Always returns `null`** — `aboutPage`
   isn't a registered schema (see ARCHITECTURE.md §5), so no such document can
   exist in Studio yet. The About page runs on hardcoded local content instead.
@@ -78,7 +89,9 @@ src/
     index.astro                 ← homepage
     works/index.astro           ← all artworks grid
     works/[slug].astro          ← individual artwork + JSON-LD
-    collections/index.astro     ← all collections grid
+    collections/index.astro     ← editorial index (alternating cover/text
+                                    rows, no work-thumbnail preview — see
+                                    ARCHITECTURE.md §21)
     collections/[slug].astro    ← collection detail (storyPages + artworks)
     about.astro
     contact.astro               ← v2 placeholder
@@ -178,7 +191,8 @@ const data = parsed.data
 
 ### Zod schema notes
 - **Every optional field is `.nullish()`, never `.optional()`** — GROQ returns `null` (not `undefined`) for anything unset in Studio, and `.optional()` rejects `null`, which makes `parseList` drop the whole document. Instances: `artwork.collection` (also shaped to accept both the dereferenced `{title,slug}` and the raw `{_ref}`), and `image.hotspot` / `image.crop` on `artwork.image` and `collection.coverImage`.
-- `collection.artworkCount`: `z.number().optional()` — computed field from GROQ, would be stripped otherwise.
+- `collection.artworkCount`: `z.number().nullish()` — computed field from GROQ, would be stripped otherwise. `.nullish()`, not `.optional()`, per the rule above: `count()` returns `null` (not undefined) for a collection whose `artworks` array was never set.
+- `collection.artworks[].image`: `.nullish().catch(null)`. The `.catch()` is required, not stylistic — this field is validated by a single `safeParse` on one document (`collections/[slug].astro`), *not* by `parseList`, so there is no per-item damage containment above it. Without the catch, one image object missing `asset` fails the item → the array → the whole collection → and the detail page redirects away. The catch degrades it to a missing thumbnail instead.
 
 ### Image URLs
 ```typescript
@@ -202,6 +216,9 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - If you add a color not in tokens.css, add it there first
 - `.reveal` + `.reveal.visible` classes defined in global.css — use them for all scroll animations
 - `text-transform: uppercase` on labels/eyebrows is intentional — do not remove from `.nav-links a`, `.footer-links a`, `.hero-eyebrow`, `.sec-label`
+- `.ci-eyebrow` and `.works-eyebrow` share font-size/letter-spacing (11px,
+  0.22em) intentionally — any future eyebrow component should match this,
+  not invent a third value
 
 ### Scroll reveal
 ```html
@@ -222,6 +239,7 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - Never skip `alt` text on artwork images
 - Never defer the theme init script — must be inline in `<head>`
 - Never render the same Sanity image twice in markup to serve different breakpoints — reposition one `<img>` with CSS instead
+- Never derive collection-detail layout from the position or content of a storyPages array element — Sanity fields (title, tagline, location, year) drive the cover; storyPages is presentation-neutral content RJ can reorder freely. See ARCHITECTURE.md section 20.
 
 ---
 
@@ -231,11 +249,11 @@ Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
               (run `npm run build` output for current count)
 Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
 Sanity:       webhook → Cloudflare deploy hook, live
-TS errors:    0 (last confirmed 2026-08-08; footer texture change on
-              2026-08-11 is CSS-only inside an existing <style> block —
-              re-run `npx astro check` + `npm run build` to reconfirm, not
-              yet run against that change)
-Build:        clean (see note above)
+TS errors:    0 (confirmed 2026-08-18 after collection-detail resilience
+              pass — see SESSIONS.md same date)
+Not verified: 700px breakpoint boundary pixel-exact (works-head/gallery
+              rail split)
+Build:        clean — 36 pages
 ```
 
 ---

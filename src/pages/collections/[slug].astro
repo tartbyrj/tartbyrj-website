@@ -1,134 +1,369 @@
 ---
-import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
 import { parseList } from '../../lib/sanity/parse';
-import { COLLECTION_BY_SLUG_QUERY } from '../../lib/sanity/queries';
-import { CollectionSchema } from '../../types/collection';
+import {
+  COLLECTION_BY_SLUG_QUERY,
+  COLLECTION_NEIGHBOURS_QUERY,
+} from '../../lib/sanity/queries';
+import {
+  CollectionNeighbourSchema,
+  CollectionSchema,
+  type Collection,
+  type CollectionNeighbour,
+} from '../../types/collection';
+
+type CollectionArtwork = NonNullable<NonNullable<Collection['artworks']>[number]>;
+// Narrowed shape after the filter below: slug is confirmed present, so the
+// template can read artwork.slug.current without an extra guard per access.
+type LinkableArtwork = CollectionArtwork & { slug: { current: string } };
+
+// A storyPages item degrades to null (schema's .catch(null)) when Studio's
+// bare {_key, _type:'image'} — inserted the instant an editor clicks "Add
+// item" before uploading — has no `asset`. Filtered out below so the deck
+// never renders an empty plate for it.
+type StoryPage = NonNullable<NonNullable<Collection['storyPages']>[number]>;
+
+type Neighbour = CollectionNeighbour;
 
 export async function getStaticPaths() {
-  const rawSlugs = await client
-    .fetch(`*[_type == "collection" && defined(slug.current)]{"slug": slug.current}`)
-    .catch(() => null);
+  const raw = await client.fetch(COLLECTION_NEIGHBOURS_QUERY).catch((error: unknown) => {
+    console.error(
+      `[sanity] COLLECTION_NEIGHBOURS_QUERY: fetch failed — ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return null;
+  });
 
-  const slugs = parseList(z.object({ slug: z.string() }), rawSlugs, 'collection slugs');
+  const all = parseList(CollectionNeighbourSchema, raw, 'COLLECTION_NEIGHBOURS_QUERY');
 
-  return slugs.map(({ slug }) => ({ params: { slug } }));
+  // Wrapping neighbours: the last collection's "next" is the first — but only
+  // once there are at least 3, since with exactly 2 that wrap makes prev and
+  // next resolve to the same other collection (both directions lead to the
+  // one other item). At n===2 neighbours therefore don't wrap: index 0 gets
+  // next only, index 1 gets prev only, so exactly one link renders per page
+  // instead of two identical ones. At n<=1 both are null and the whole
+  // section is skipped, rather than rendering a link back to the page you
+  // are already on.
+  return all.map(({ slug }, i) => {
+    const len = all.length;
+    if (len <= 1) return { params: { slug }, props: { prev: null, next: null } };
+    if (len === 2) {
+      return {
+        params: { slug },
+        props: { prev: i > 0 ? all[i - 1] : null, next: i < len - 1 ? all[i + 1] : null },
+      };
+    }
+    return {
+      params: { slug },
+      props: { prev: all[(i - 1 + len) % len], next: all[(i + 1) % len] },
+    };
+  });
 }
 
+interface Props {
+  prev: Neighbour | null;
+  next: Neighbour | null;
+}
+
+const { prev, next } = Astro.props as Props;
 const { slug } = Astro.params;
 
-const raw = await client.fetch(COLLECTION_BY_SLUG_QUERY, { slug }).catch(() => null);
+const raw = await client.fetch(COLLECTION_BY_SLUG_QUERY, { slug }).catch((error: unknown) => {
+  console.error(
+    `[sanity] COLLECTION_BY_SLUG_QUERY (slug=${slug}): fetch failed — ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  );
+  return null;
+});
+
 const parsed = CollectionSchema.safeParse(raw);
 
 if (!parsed.success) {
+  // The redirect is silent to a visitor and silent in the build output too
+  // without this: the page becomes a redirect and /collections drops the same
+  // row via parseList, so a collection can vanish from the site with a clean
+  // Cloudflare log. The build log is the only place anyone would notice.
+  console.warn(
+    `[sanity] COLLECTION_BY_SLUG_QUERY (slug=${slug}): failed validation, redirecting to /collections —`,
+    parsed.error.issues
+  );
   return Astro.redirect('/collections');
 }
 
 const collection = parsed.data;
 
-const heroUrl = collection.coverImage
-  ? urlFor(collection.coverImage).width(1920).format('webp').quality(85).url()
-  : undefined;
-
-const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
-  urlFor(page).width(1440).format('webp').quality(85).url()
+/* ── The deck ───────────────────────────────────────────────────────────────
+   storyPages is the exported Canva deck, in order, every page a spread —
+   there is no separate cover slot in the render. Title, tagline, location and
+   year come from Sanity fields and render as real page text instead, so
+   numbering below is 1:1 with the array: plate index 0 is page "01 / N". */
+const storyPages = (collection.storyPages ?? []).filter(
+  (page): page is StoryPage => page != null
 );
+const plates = storyPages;
+const totalPages = storyPages.length;
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+const PLATE_W = 1920;
+// Deliberately higher than PLATE_W even though it currently buys nothing:
+// today's deck sources are 1920×1080 and `fit=max` never upscales, so this
+// URL and the plate's return byte-identical images (at the cost of a second
+// cache entry — the lightbox re-fetches on desktop rather than reusing the
+// decoded plate). Left at 3200 rather than lowered to match, because the
+// tracked deck re-export at 3840×2160 — the same item that fixes the
+// "Rupiyoti"→"Rupjyoti" typo baked into the deck pixels, see SESSIONS.md
+// "Not Verified" / "Next Session Candidates" — makes the gap real: at that
+// source, the plate stays a 1920 render and the lightbox delivers the
+// detail the full-screen view is for. Lowering it now would have to be
+// undone by that re-export, and silently under-serve the new assets if it
+// wasn't. Revisit only if the re-export is abandoned.
+const LIGHTBOX_W = 3200;
+// The deck exports at 16:9. Height attributes are derived, not measured, so
+// every image reserves its box before it loads and CLS stays at zero.
+const ratio16by9 = (w: number) => Math.round((w / 16) * 9);
+
+const plateUrls = plates.map((page) =>
+  urlFor(page).width(PLATE_W).fit('max').format('webp').quality(88).url()
+);
+
+// Lightbox sources are never emitted as src/srcset — they live in a data
+// attribute and are assigned on open. A deck of 16 pages at w=3200 would
+// otherwise be several megabytes of images the visitor may never open.
+const lightboxUrls = storyPages.map((page) =>
+  urlFor(page).width(LIGHTBOX_W).fit('max').format('webp').quality(88).url()
+);
+
+const statement = collection.description?.trim() || null;
+const tagline = collection.tagline?.trim() || null;
+
+const eyebrowMeta = [collection.location, collection.year].filter(Boolean).join(', ');
+const eyebrow = eyebrowMeta ? `Archive Collection · ${eyebrowMeta}` : 'Archive Collection';
+
+const artworks = (collection.artworks ?? []).filter(
+  (artwork): artwork is LinkableArtwork => Boolean(artwork?.slug?.current)
+);
+
+// The filter above guarantees a slug, not a title — title is .nullish() on the
+// schema, so an artwork can pass it with nothing to display. The card's image
+// is alt="" by design (§8: the visible title is the link's accessible name), so
+// a null title left the <a> with no accessible name and nothing on screen. The
+// slug is the only other human-readable string on the item and is guaranteed
+// present here, so it stands in rather than shipping an empty link.
+const workLabel = (artwork: LinkableArtwork) =>
+  artwork.title?.trim() || artwork.slug.current;
+
+// Floor for a collection with no deck, no artwork refs and no statement —
+// distinct from a merely cover-less collection (§21's fallback panel), this
+// is the page having nothing else to render at all. Populated collections
+// are untouched: this only fires when plates, works and statement are all
+// empty at once.
+const isEmptyCollection = plates.length === 0 && artworks.length === 0 && !statement;
+const emptyCoverUrl = collection.coverImage?.asset
+  ? urlFor(collection.coverImage).width(1200).fit('max').format('webp').quality(85).url()
+  : null;
+
+/* ── Meta ───────────────────────────────────────────────────────────────────
+   Every collection page used to ship Layout's generic site description, so
+   search results for two different collections were word-for-word identical.
+   Statement first (it is the page's only real prose), then tagline, then —
+   by passing undefined — Layout's default. */
+function truncateAtWord(text: string, limit = 155): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= limit) return clean;
+  const cut = clean.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(' ');
+  const trimmed = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.–—-]+$/, '');
+  return `${trimmed}…`;
+}
+
+const metaSource = statement ?? tagline;
+const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
 ---
 
-<Layout title={collection.title}>
+<Layout title={collection.title} description={metaDescription}>
   <div class="collection-detail">
-    <section class="hero">
-      {heroUrl && (
-        <img
-          src={heroUrl}
-          alt={collection.title}
-          class="h-full w-full object-cover"
-          loading="eager"
-        />
-      )}
-
+    <div class="page-head">
       <a href="/collections" class="back-link">← Back to Collections</a>
 
-      <div class="hero-overlay">
-        <h1 class="text-4xl md:text-6xl font-light tracking-tight">{collection.title}</h1>
-        <p class="hero-meta">
-          {[collection.location, collection.year].filter(Boolean).join(' · ')}
-        </p>
-      </div>
-    </section>
+      <section class="intro">
+        <p class="intro-eyebrow">{eyebrow}</p>
+        <h1 class="intro-title">{collection.title}</h1>
+        {tagline && <p class="intro-tagline">{tagline}</p>}
+      </section>
+    </div>
 
-    {storyPageUrls.length > 0 && (
-      <section class="story">
-        {storyPageUrls.map((src, i) => (
+    {statement && (
+      <blockquote class="statement">{statement}</blockquote>
+    )}
+
+    {isEmptyCollection && (
+      <section class="empty-floor">
+        {emptyCoverUrl && (
           <img
-            src={src}
-            alt={`${collection.title} — page ${i + 1}`}
-            class="story-page"
+            class="empty-floor-img"
+            src={emptyCoverUrl}
+            alt=""
+            width="1200"
+            height="800"
             loading="lazy"
+            decoding="async"
           />
-        ))}
+        )}
+        <p class="empty-floor-copy">
+          More from this collection coming soon. <a href="/works">Browse all works →</a>
+        </p>
       </section>
     )}
 
-    <section class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="works-heading text-2xl md:text-3xl font-light mb-10">Works in this Collection</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        {/* A reference to a deleted or unpublished artwork dereferences to null,
-            which would crash the build on artwork.slug.current. */}
-        {(collection.artworks ?? [])
-          .filter((artwork: any) => artwork?.slug?.current)
-          .map((artwork: any) => (
-            <a href={`/works/${artwork.slug.current}`} class="group block work-link">
-              <div class="work-thumb aspect-square overflow-hidden">
-                {artwork.image && (
+    {plates.length > 0 && (
+      <>
+        <section class="deck-plates">
+          {plateUrls.map((src, i) => (
+            <button
+              type="button"
+              class="plate"
+              data-lb-open={i}
+              aria-label={`View page ${pad(i + 1)} of ${pad(totalPages)} full screen`}
+            >
+              <img
+                class="plate-img"
+                src={src}
+                alt=""
+                width={PLATE_W}
+                height={ratio16by9(PLATE_W)}
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="plate-number">{pad(i + 1)} / {pad(totalPages)}</span>
+            </button>
+          ))}
+        </section>
+
+        {/* Phone: the plates stay in the DOM but are hidden, and this opens the
+            deck in the lightbox from page 01 instead. Singular at exactly 1,
+            same rule as the works count on /collections (§21) — "1 pages"
+            reads as a typo, not as a feature. */}
+        <button type="button" class="deck-cta" data-lb-open="0">
+          View collection — {totalPages} {totalPages === 1 ? 'page' : 'pages'}
+        </button>
+
+        <noscript>
+          <style is:inline>
+            @media (max-width: 767px) {
+              .deck-plates { display: flex !important; }
+              .deck-cta { display: none !important; }
+            }
+          </style>
+        </noscript>
+      </>
+    )}
+
+    {artworks.length > 0 && (
+      <section class="works">
+        <div class="works-head">
+          <h2 class="works-label">Works in this Collection</h2>
+          <a class="works-head-link" href="/works">View all works</a>
+        </div>
+        <div class="works-grid">
+          {/* A reference to a deleted or unpublished artwork dereferences to
+              null, which would crash the build on artwork.slug.current — the
+              filter above drops those before they get here. */}
+          {artworks.map((artwork) => (
+            <a href={`/works/${artwork.slug.current}`} class="work-link">
+              {/* alt="" is deliberate: the link already carries the title as
+                  visible text below, and descriptive alt here would make a
+                  screen reader announce it twice (ARCHITECTURE.md §8). */}
+              <div class="work-thumb">
+                {artwork.image?.asset && (
                   <img
-                    src={urlFor(artwork.image).width(800).height(800).format('webp').quality(85).url()}
-                    alt={artwork.altText ?? artwork.title}
+                    src={urlFor(artwork.image).width(800).height(800).fit('max').format('webp').quality(85).url()}
+                    alt=""
+                    width="800"
+                    height="800"
                     loading="lazy"
-                    class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    decoding="async"
                   />
                 )}
               </div>
-              <p class="work-title mt-3 text-sm tracking-wide">{artwork.title}</p>
-              {artwork.year && <p class="work-year text-xs">{artwork.year}</p>}
+              <p class="work-title">{workLabel(artwork)}</p>
+              {artwork.year && <p class="work-year">{artwork.year}</p>}
             </a>
           ))}
-      </div>
-    </section>
+        </div>
+      </section>
+    )}
+
+    {(prev || next) && (
+      <nav class="neighbours" aria-label="Other collections">
+        {prev && (
+          <a href={`/collections/${prev.slug}`} class="neighbour neighbour-prev">
+            <span class="neighbour-label">Previous</span>
+            <span class="neighbour-title">{prev.title}</span>
+          </a>
+        )}
+        {next && (
+          <a href={`/collections/${next.slug}`} class="neighbour neighbour-next">
+            <span class="neighbour-label">Next</span>
+            <span class="neighbour-title">{next.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
   </div>
+
+  {totalPages > 0 && (
+    <dialog
+      id="deck-lightbox"
+      class="lightbox"
+      aria-label={`${collection.title} — deck pages`}
+      data-pages={JSON.stringify(lightboxUrls)}
+    >
+      <div class="lightbox-stage">
+        <img class="lightbox-img" alt="" decoding="async" />
+      </div>
+      <p class="lightbox-counter" aria-live="polite"></p>
+      <button type="button" class="lightbox-btn lightbox-prev" aria-label="Previous page">←</button>
+      <button type="button" class="lightbox-btn lightbox-next" aria-label="Next page">→</button>
+      <button type="button" class="lightbox-btn lightbox-close" aria-label="Close">✕</button>
+    </dialog>
+  )}
 </Layout>
 
 <style>
-  :global(html) {
-    scroll-behavior: smooth;
-  }
-
   .collection-detail {
-    margin: 0;
+    position: relative;
+    /* The nav is fixed, so the page reserves its own height under it before
+       any content flows — .page-head included. */
+    padding-top: var(--nav-h);
     background: var(--bg-primary);
     color: var(--text-primary);
   }
 
-  .hero {
-    position: relative;
-    height: 100vh;
-    width: 100%;
-    overflow: hidden;
+  /* Shared max-width and left inset for everything at the top of the page —
+     .back-link and .intro both live in here so they share one left edge
+     instead of .back-link tracking the viewport and .intro tracking this
+     box's centred margin. */
+  .page-head {
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: 0 24px;
   }
 
-  /* Absolute (not fixed) and offset below the nav bar: no z-index contest with
-     the fixed nav, and no overlap with the nav logo it used to sit on top of. */
+  /* Normal flow, not absolute: it no longer floats over a full-bleed cover
+     photo (that section was removed), so there is nothing left for it to
+     overlap and no reason to pull it out of the document. margin-top is its
+     entire gap from the fixed nav above. */
   .back-link {
-    position: absolute;
-    top: 92px;
-    left: 24px;
+    display: inline-block;
+    margin-top: 20px;
     font-size: 13px;
     letter-spacing: 0.04em;
     text-decoration: none;
     color: var(--text-primary);
-    /* Sits over an arbitrary photograph — a themed scrim keeps it legible
-       without hardcoding a colour. Mirrors #nav.scrolled. */
     background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
     backdrop-filter: blur(10px);
     border: 1px solid var(--border);
@@ -142,60 +377,587 @@ const storyPageUrls: string[] = (collection.storyPages ?? []).map((page) =>
     border-color: var(--accent-dim);
   }
 
-  .hero-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: 40px;
-    /* Theme-aware scrim (light scrim + dark text in light theme, and the
-       inverse in dark) — same token the works grid overlay uses. */
-    background: var(--hero-overlay);
+  /* ── Intro ─────────────────────────────────────────────────────────────── */
+
+  /* Half of the between-major-sections gap: this is the page opening, not a
+     boundary between two sections like .works-head's hairline below, so it
+     doesn't need that same full weight. Horizontal inset now comes from
+     .page-head. */
+  .intro {
+    padding-top: calc(var(--space-section) / 2);
+  }
+
+  @media (max-width: 767px) {
+    .intro {
+      padding-top: calc(var(--space-section-m) / 2);
+    }
+  }
+
+  .intro-eyebrow {
+    margin: 0 0 14px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Same page-heading tier as .works-title on /works — not the hero/page-title
+     scale used elsewhere — since this page's subject is the deck and works
+     below it, not the title itself. */
+  .intro-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.1;
+    margin: 0;
     color: var(--text-primary);
   }
 
-  .hero-meta {
-    margin-top: 8px;
+  @media (max-width: 767px) {
+    .intro-title {
+      font-size: clamp(24px, 8vw, 32px);
+    }
+  }
+
+  .intro-tagline {
+    margin: 14px 0 0;
+    max-width: 48ch;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(17px, 2vw, 21px);
+    line-height: 1.4;
     color: var(--text-secondary);
   }
 
-  .works-heading {
+  /* ── Statement ─────────────────────────────────────────────────────────── */
+
+  .statement {
+    margin: 0 auto;
+    padding: clamp(48px, 6vh, 96px) 24px;
+    max-width: 24ch;
+    text-align: center;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(24px, 3.4vw, 34px);
+    line-height: 1.4;
     color: var(--text-primary);
   }
 
+  /* ── Empty floor ───────────────────────────────────────────────────────── */
+  /* Only when storyPages, artworks and statement are all empty/null at once
+     — see isEmptyCollection. Same plate width as .plate below, so a lone
+     cover reads as "a plate" rather than as a broken layout. */
+
+  .empty-floor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    padding: 0 24px clamp(72px, 10vh, 140px);
+    text-align: center;
+  }
+
+  /* aspect-ratio + object-fit: cover, matching .ci-cover on
+     /collections (§21) — not .plate-img's contain. coverImage has no
+     guaranteed ratio (unlike a 16:9 deck export), so the width/height
+     attributes on the tag alone would reserve a 3:2 box and then reflow to
+     the file's real shape on load. Pinning the ratio here makes the reserved
+     box the final box, and cover fills it. */
+  .empty-floor-img {
+    display: block;
+    width: min(1100px, 92vw);
+    aspect-ratio: 3 / 2;
+    max-height: 82vh;
+    object-fit: cover;
+    background: var(--bg-secondary);
+  }
+
+  .empty-floor-copy {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .empty-floor-copy a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+  }
+
+  /* ── Plates ────────────────────────────────────────────────────────────── */
+
+  .deck-plates {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(72px, 10vh, 140px);
+    padding: 0 0 clamp(72px, 10vh, 140px);
+    background: var(--bg-primary);
+  }
+
+  .plate {
+    display: block;
+    width: min(1100px, 92vw);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: zoom-in;
+  }
+
+  .plate-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    max-height: 82vh;
+    object-fit: contain;
+    background: var(--bg-primary);
+  }
+
+  .plate-number {
+    display: block;
+    margin-top: 10px;
+    text-align: right;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .deck-cta {
+    display: none;
+    width: calc(100% - 48px);
+    margin: 0 24px clamp(72px, 10vh, 140px);
+    padding: 18px 20px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  @media (max-width: 767px) {
+    /* Kept in the DOM, not removed: a no-JS visitor gets them back via the
+       <noscript> block, which has nothing to re-insert if they were dropped
+       server-side. Every plate is loading="lazy" and none ever enters a
+       viewport while hidden, so hiding them costs no image bytes here. */
+    .deck-plates {
+      display: none;
+    }
+
+    .deck-cta {
+      display: block;
+    }
+  }
+
+  /* ── Works ─────────────────────────────────────────────────────────────── */
+
+  .works {
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: 0 24px clamp(80px, 10vh, 120px);
+  }
+
+  /* Mirrors .rw-head / .rw-label on the homepage — same rule, same 22px, same
+     eyebrow metrics, so the two pages read as one system (ARCHITECTURE.md §17).
+     justify-content holds the right-hand slot the pattern allows, filled here
+     by .works-head-link ("View all works"). */
+  .works-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    border-top: 1px solid var(--border-strong);
+    padding-top: 22px;
+    margin-bottom: clamp(32px, 4vw, 52px);
+  }
+
+  .works-label {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /* Matches .rw-head-link on index.astro — the secondary item in the same
+     section-separator pattern (ARCHITECTURE.md §17). */
+  .works-head-link {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 2px;
+  }
+
+  .works-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  @media (min-width: 640px) {
+    .works-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .works-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
   .work-link {
+    display: block;
     text-decoration: none;
   }
 
   .work-thumb {
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
     background: var(--bg-secondary);
   }
 
+  .work-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-slow) var(--ease-out);
+  }
+
+  .work-link:hover .work-thumb img {
+    transform: scale(1.05);
+  }
+
   .work-title {
+    margin: 12px 0 0;
+    font-size: 14px;
+    letter-spacing: 0.02em;
     color: var(--text-primary);
   }
 
   .work-year {
+    margin: 2px 0 0;
+    font-size: 12px;
     color: var(--text-secondary);
   }
 
-  @media (max-width: 700px) {
-    .hero-overlay {
-      padding: 24px;
+  /* ── Prev / next ───────────────────────────────────────────────────────── */
+
+  .neighbours {
+    display: flex;
+    gap: 24px;
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: 28px 24px clamp(80px, 10vh, 120px);
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .neighbour {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-decoration: none;
+    max-width: 45%;
+  }
+
+  .neighbour-next {
+    text-align: right;
+    align-items: flex-end;
+    /* Direction, not balance: this pins next to the right edge whether prev
+       is present or not, rather than relying on justify-content: space-between,
+       which only works with exactly two children and collapses a lone next to
+       the left when prev is absent (n===2 neighbours, see getStaticPaths). */
+    margin-left: auto;
+  }
+
+  .neighbour-label {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .neighbour-title {
+    font-family: var(--font-serif);
+    font-size: clamp(19px, 2.4vw, 25px);
+    line-height: 1.2;
+    color: var(--text-primary);
+    transition: color var(--dur-base) ease;
+  }
+
+  .neighbour:hover .neighbour-title {
+    color: var(--accent);
+  }
+
+  /* ── Lightbox ──────────────────────────────────────────────────────────── */
+
+  .lightbox {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    padding: 0;
+    border: 0;
+    background: var(--lightbox-backdrop);
+    color: var(--text-primary);
+    overflow: hidden;
+  }
+
+  .lightbox::backdrop {
+    background: var(--lightbox-backdrop);
+  }
+
+  .lightbox-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: clamp(16px, 4vw, 56px);
+    box-sizing: border-box;
+    /* The swipe surface. touch-action lets the browser keep pinch-zoom while
+       the handler still sees horizontal drags. */
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .lightbox-img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .lightbox-counter {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lightbox-btn {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 44×44 minimum touch target. */
+    width: 48px;
+    height: 48px;
+    font-size: 17px;
+    line-height: 1;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease;
+  }
+
+  .lightbox-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .lightbox-prev {
+    left: clamp(12px, 2vw, 28px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .lightbox-next {
+    right: clamp(12px, 2vw, 28px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .lightbox-close {
+    top: clamp(12px, 2vw, 28px);
+    right: clamp(12px, 2vw, 28px);
+  }
+
+  /* Opening a full-screen overlay is exactly the kind of large-area movement
+     that triggers vestibular symptoms, so both directions are dropped rather
+     than shortened. */
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox[open] {
+      animation: lightbox-in 0.22s var(--ease-out);
+    }
+
+    .lightbox[open]::backdrop {
+      animation: lightbox-in 0.22s var(--ease-out);
     }
   }
 
-  .story {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .story-page {
-    display: block;
-    width: 100vw;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-    margin: 0;
+  @keyframes lightbox-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 </style>
+
+<script>
+  const el = document.getElementById('deck-lightbox');
+
+  if (el instanceof HTMLDialogElement) {
+    // Re-bound so the narrowing survives into the handlers below — TypeScript
+    // drops it inside hoisted function declarations.
+    const dialog: HTMLDialogElement = el;
+    const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
+    const counter = dialog.querySelector<HTMLElement>('.lightbox-counter');
+    const stage = dialog.querySelector<HTMLElement>('.lightbox-stage');
+
+    let pages: string[] = [];
+    try {
+      pages = JSON.parse(dialog.dataset.pages ?? '[]');
+    } catch {
+      pages = [];
+    }
+
+    if (img && counter && pages.length > 0) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      let index = 0;
+      let trigger: HTMLElement | null = null;
+
+      // The only place a lightbox src is ever set. Nothing here runs until the
+      // visitor opens the deck, so the w=3200 renditions are never fetched on
+      // page load.
+      function show(next: number) {
+        index = (next + pages.length) % pages.length;
+        img!.src = pages[index];
+        counter!.textContent = `${pad(index + 1)} / ${pad(pages.length)}`;
+      }
+
+      function open(at: number, from: HTMLElement) {
+        trigger = from;
+        show(at);
+        dialog.showModal();
+      }
+
+      document.querySelectorAll<HTMLElement>('[data-lb-open]').forEach((el) => {
+        el.addEventListener('click', () => {
+          open(Number(el.dataset.lbOpen ?? 0), el);
+        });
+      });
+
+      dialog.querySelector('.lightbox-prev')?.addEventListener('click', () => show(index - 1));
+      dialog.querySelector('.lightbox-next')?.addEventListener('click', () => show(index + 1));
+      dialog.querySelector('.lightbox-close')?.addEventListener('click', () => dialog.close());
+
+      // showModal() already traps focus and Escape already closes; only the
+      // arrows need wiring.
+      dialog.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          show(index - 1);
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          show(index + 1);
+        }
+      });
+
+      // Click-outside-to-close. The check is against the stage, not the
+      // dialog: .lightbox is padding:0 at 100vw/100vh and .lightbox-stage is
+      // width/height:100%, so the stage covers the dialog's entire content box
+      // and `event.target === dialog` can never fire — nor is there a visible
+      // ::backdrop region to click. Every click lands on the stage, the image,
+      // or a button. The stage's own padding plus the letterboxing around a
+      // contained image is the "outside" a visitor actually clicks, and that
+      // reports the stage as the target.
+      stage?.addEventListener('click', (event) => {
+        if (event.target === stage) dialog.close();
+      });
+
+      let startX = 0;
+      let startY = 0;
+      // Whether the gesture in progress is still a single, uninterrupted
+      // finger. A second touch cancels it for good: without this, the pinch's
+      // second touchstart overwrote startX/startY, and touchend then measured
+      // whichever finger lifted first against the *other* finger's origin —
+      // a difference that clears the 45px threshold easily, so pinch-zooming
+      // a plate silently paged the deck. Checking Math.abs(dx) > Math.abs(dy)
+      // alone never caught this; the two fingers of a pinch are usually
+      // further apart horizontally than vertically.
+      let singleTouch = false;
+
+      stage?.addEventListener(
+        'touchstart',
+        (event) => {
+          // touches is every finger currently down, changedTouches only the
+          // ones this event added. Both must be 1 for this to be the first
+          // finger of a fresh gesture.
+          singleTouch = event.touches.length === 1 && event.changedTouches.length === 1;
+          if (!singleTouch) return;
+          startX = event.changedTouches[0].clientX;
+          startY = event.changedTouches[0].clientY;
+        },
+        { passive: true }
+      );
+
+      stage?.addEventListener(
+        'touchend',
+        (event) => {
+          // touches.length === 0 means this lift ended the gesture rather than
+          // being one finger of several coming up.
+          const ended = event.touches.length === 0 && event.changedTouches.length === 1;
+          const wasSingle = singleTouch;
+          if (event.touches.length === 0) singleTouch = false;
+          if (!wasSingle || !ended) return;
+
+          const dx = event.changedTouches[0].clientX - startX;
+          const dy = event.changedTouches[0].clientY - startY;
+          // Horizontal intent only, so a vertical scroll does not page the
+          // deck. Pinches are already excluded by the guards above.
+          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+            show(dx < 0 ? index + 1 : index - 1);
+          }
+        },
+        { passive: true }
+      );
+
+      // A cancelled gesture (system gesture, call overlay) must not leave
+      // singleTouch armed for the next touchend.
+      stage?.addEventListener('touchcancel', () => {
+        singleTouch = false;
+      }, { passive: true });
+
+      // Native dialog restores focus on its own in current browsers, but not
+      // consistently in older Safari — and dropping focus to <body> loses the
+      // visitor's place in a page this long.
+      dialog.addEventListener('close', () => {
+        // Release the decoded bitmap; the next open re-fetches from cache.
+        img!.removeAttribute('src');
+        trigger?.focus();
+        trigger = null;
+      });
+    }
+  }
+</script>

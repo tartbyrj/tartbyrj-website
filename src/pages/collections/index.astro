@@ -1,143 +1,432 @@
 ---
-import { z } from 'zod';
 import Layout from '../../layouts/Layout.astro';
 import { client, urlFor } from '../../lib/sanity/client';
 import { parseList } from '../../lib/sanity/parse';
+import { COLLECTIONS_ALL_QUERY } from '../../lib/sanity/queries';
+import { CollectionSchema, type Collection } from '../../types/collection';
 
-// `slug` is projected as a string here (not the {current} object CollectionSchema
-// expects), so this list has its own shape.
-const CollectionCardSchema = z.object({
-  title: z.string(),
-  slug: z.string(),
-  year: z.number().nullish(),
-  location: z.string().nullish(),
-  coverImage: z.any().nullish(),
-  artworkCount: z.number().nullish(),
+// Logged, not swallowed — same pattern as collections/[slug].astro. parseList
+// stays deliberately silent when raw is null (parse.ts), so without this a
+// Sanity outage or a malformed query ships this page's "still being
+// catalogued" empty state with a completely clean build log.
+const rawCollections = await client.fetch(COLLECTIONS_ALL_QUERY).catch((error: unknown) => {
+  console.error(
+    `[sanity] COLLECTIONS_ALL_QUERY: fetch failed — ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  );
+  return null;
 });
 
-const raw = await client
-  .fetch(
-    `*[_type == "collection" && defined(slug.current)] | order(year desc){
-      title,
-      year,
-      location,
-      coverImage,
-      "slug": slug.current,
-      "artworkCount": count(artworks)
-    }`
-  )
-  .catch(() => null);
+const collections = parseList(CollectionSchema, rawCollections, 'collections index');
 
-const collections = parseList(CollectionCardSchema, raw, 'collections list');
+const COVER_WIDTHS = [600, 900, 1200] as const;
+const COVER_BASE_W = 900;
+
+// >=1200px the two 1fr columns settle at ~522px inside the 1152px measure
+// (1152 - 48px gutters - 60px gap, halved). 528 is declared below rather than
+// 522 — a slightly generous sizes hint only biases the browser toward the next
+// srcset candidate, which is the safe direction to round. Below 1024px the row is a single
+// column at the full content width. fit('max') caps delivery at the source
+// file's own resolution, so the 1200w candidate never upscales a smaller cover
+// — same reasoning as the plates on /collections/[slug] (§20).
+const COVER_SIZES = [
+  '(min-width: 1200px) 528px',
+  '(min-width: 1024px) calc((100vw - 110px) / 2)',
+  'calc(100vw - 48px)',
+].join(', ');
+
+type CoverImage = NonNullable<Collection['coverImage']>;
+
+function coverUrl(image: CoverImage, width: number): string {
+  return urlFor(image).width(width).format('webp').quality(85).fit('max').url();
+}
+
+function coverSrcSet(image: CoverImage): string {
+  return COVER_WIDTHS.map((w) => `${coverUrl(image, w)} ${w}w`).join(', ');
+}
+
+function pct(fraction: number): string {
+  return `${(Math.min(Math.max(fraction, 0), 1) * 100).toFixed(1)}%`;
+}
+
+// The cover box is a fixed 3/2 crop, so object-position decides which part of a
+// tall or wide cover survives it. Sanity records the hotspot against the
+// *uncropped* asset, while urlFor() bakes any Studio crop into the URL — so the
+// delivered file's origin is the crop's top-left, and the hotspot has to be
+// re-expressed against it. Reading the raw hotspot instead puts the focal point
+// off by the crop offset, and the error grows with the crop.
+//
+// NOTE: the same math lives inside workGeometry() in src/pages/index.astro.
+// Two copies, deliberately not consolidated in this pass — the homepage version
+// is entangled with ratio and srcset work this page does not do. Worth a shared
+// helper if a third caller appears (cropAdjustedAspectRatio already went through
+// exactly this consolidation — see ARCHITECTURE.md §19).
+function coverFocus(image: CoverImage): string {
+  const { hotspot, crop } = image;
+  if (!hotspot) return '50% 50%';
+
+  const left = crop?.left ?? 0;
+  const top = crop?.top ?? 0;
+  const keptW = 1 - left - (crop?.right ?? 0);
+  const keptH = 1 - top - (crop?.bottom ?? 0);
+
+  // A crop that keeps nothing is not something to divide by. Studio cannot
+  // author one, but crop is free-form JSON to anything writing over the API,
+  // and this runs at build time where a NaN would ship silently.
+  if (keptW <= 0 || keptH <= 0) return '50% 50%';
+
+  return `${pct((hotspot.x - left) / keptW)} ${pct((hotspot.y - top) / keptH)}`;
+}
+
+const rows = collections.map((collection, i) => {
+  const count = collection.artworkCount;
+  const cover = collection.coverImage;
+
+  return {
+    collection,
+    cover,
+    // Index is presentational, not a Sanity field — it numbers the page's own
+    // ordering, so it stays correct if a collection is added or unpublished.
+    index: String(i + 1).padStart(2, '0'),
+    // Omitted entirely at 0 or null: an untagged collection should read as
+    // "not catalogued yet", not as an empty body of work.
+    count: count != null && count > 0 ? `${count} ${count === 1 ? 'work' : 'works'}` : null,
+    // Both halves are .nullish(). Joining what exists means a missing one never
+    // ships a dangling separator, and the line disappears if neither is set.
+    place:
+      [collection.location, collection.year]
+        .filter((part) => part != null && part !== '')
+        .join(' · ') || null,
+    // Guarded against '' as well as null — an emptied Studio field is not copy.
+    tagline: collection.tagline?.trim() ? collection.tagline : null,
+    focus: cover ? coverFocus(cover) : '50% 50%',
+    // Only the first row can be above the fold on any viewport; everything
+    // below it is a lazy load.
+    eager: i === 0,
+  };
+});
 ---
 
-<Layout title="Collections">
-  <header class="page-head">
-    <h1 class="page-title">Collections</h1>
-  </header>
+<Layout
+  title="Collections"
+  description="Bodies of work by Rupjyoti Baruah — murals, paintings and drawings, grouped by the place and stretch of time that made them."
+>
+  <div class="ci">
+    <header class="ci-head">
+      <p class="ci-eyebrow">Collections</p>
 
-  {collections.length === 0 && <p class="empty">Collections coming soon.</p>}
+      <h1 class="ci-title">Where each collection <em>holds a moment lived</em></h1>
+    </header>
 
-  <section class="collections-grid">
-    {collections.map((collection) => (
-      <a href={`/collections/${collection.slug}`} class="collection-card reveal">
-        <div class="collection-card-media">
-          {collection.coverImage && (
-            <img
-              src={urlFor(collection.coverImage).width(900).height(1125).format('webp').quality(85).url()}
-              alt={collection.title}
-              loading="lazy"
-            />
-          )}
-        </div>
-        <h2 class="collection-card-title">{collection.title}</h2>
-        <p class="collection-card-meta">
-          {[collection.location, collection.year].filter(Boolean).join(' · ')}
-          {collection.artworkCount != null && collection.artworkCount > 0 && (
-            <span> · {collection.artworkCount} {collection.artworkCount === 1 ? 'work' : 'works'}</span>
-          )}
-        </p>
-      </a>
-    ))}
-  </section>
+    {rows.length === 0 ? (
+      <p class="ci-empty">
+        The collections are still being catalogued.
+        <a href="/works">Browse all works →</a>
+      </p>
+    ) : (
+      <div class="ci-rows">
+        {rows.map(({ collection, cover, index, count, place, tagline, focus, eager }) => (
+          <section class="ci-row reveal">
+            <div class="ci-text">
+              <p class="ci-meta">
+                <span class="ci-index">{index}</span>
+                <span class="ci-rule"></span>
+                {count && <span class="ci-count">{count}</span>}
+              </p>
+
+              <h2 class="ci-name">{collection.title}</h2>
+
+              {place && <p class="ci-place">{place}</p>}
+              {tagline && <p class="ci-tagline">{tagline}</p>}
+
+              <a class="ci-cta" href={`/collections/${collection.slug.current}`}>
+                View collection
+                <span class="ci-arrow" aria-hidden="true">→</span>
+              </a>
+            </div>
+
+            {/* A second route to the same page, not a second tab stop: the row
+                already exposes .ci-cta, and the visible title sits beside this,
+                so the image is aria-hidden and out of the tab order while
+                staying tappable where it is the dominant element. Same
+                treatment as .c-shot on the homepage. */}
+            <a
+              class="ci-cover"
+              href={`/collections/${collection.slug.current}`}
+              aria-hidden="true"
+              tabindex="-1"
+            >
+              {/* Cover only — individual works are shown on the collection's
+                  own page. A thumbnail strip here would preview the paintings
+                  at a size that reduces them to swatches, which is the same
+                  reason the homepage index rejected a card grid (§17). */}
+              {cover && (
+                <img
+                  src={coverUrl(cover, COVER_BASE_W)}
+                  srcset={coverSrcSet(cover)}
+                  sizes={COVER_SIZES}
+                  alt=""
+                  style={`--focus:${focus}`}
+                  loading={eager ? 'eager' : 'lazy'}
+                  decoding="async"
+                />
+              )}
+            </a>
+          </section>
+        ))}
+      </div>
+    )}
+  </div>
 </Layout>
 
 <style>
-  .page-head {
-    padding: 140px 52px 30px;
+  .ci {
+    /* The nav is fixed, so the page reserves its own height under it before any
+       content flows. Matches .collection-detail on /collections/[slug]. */
+    padding-top: var(--nav-h);
+    padding-bottom: var(--space-section);
     background: var(--bg-primary);
   }
 
-  .page-title {
+  /* Same measure and inset as .page-head on /collections/[slug], so the two
+     pages' left edges line up when you navigate between them. */
+  .ci-head,
+  .ci-rows {
+    max-width: 1152px;
+    margin-inline: auto;
+    padding-inline: 24px;
+  }
+
+  .ci-head {
+    padding-top: clamp(19px, 3.2vh, 38px);
+    padding-bottom: clamp(10px, 1.2vw, 14px);
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .ci-eyebrow {
+    margin: 0 0 clamp(18px, 2.4vw, 28px);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /* The page-title tier, not the section-heading tier /works and
+     /collections/[slug] use — this headline is the page's subject, since what
+     follows it is an index rather than the work itself. */
+  .ci-title {
+    margin: 0;
     font-family: var(--font-serif);
     font-weight: 300;
-    font-size: clamp(38px, 7vw, 76px);
+    font-size: clamp(33px, 4.5vw, 62px);
+    line-height: 1;
     color: var(--text-primary);
-    margin: 0;
   }
 
-  .collections-grid {
+  .ci-title em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .ci-arrow {
+    display: inline-block;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+
+  .ci-cta:hover {
+    opacity: 0.68;
+  }
+
+  .ci-cta:hover .ci-arrow,
+  .ci-cta:focus-visible .ci-arrow {
+    transform: translateX(4px);
+  }
+
+  /* Mobile-first, unlike the max-width queries used elsewhere in this codebase:
+     the alternation below is a desktop-only concern, and scoping it to one
+     min-width block keeps it from having to be unwound at two smaller
+     breakpoints. */
+  .ci-row {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 40px;
-    padding: 0 52px var(--space-section);
-    background: var(--bg-primary);
+    grid-template-columns: 1fr;
+    gap: clamp(22px, 3vw, 30px);
+    border-top: 1px solid var(--border-strong);
+    padding-top: 22px;
   }
 
-  .collection-card {
+  /* The head's own border-bottom closes the masthead; this gap keeps it from
+     reading as a doubled rule against the first row's border-top. */
+  .ci-row:first-child {
+    margin-top: clamp(24px, 3vw, 42px);
+  }
+
+  .ci-row + .ci-row {
+    margin-top: clamp(56px, 7vw, 104px);
+  }
+
+  /* Cover above text below 1024px. DOM order is text-first — the heading should
+     precede its image for a screen reader and for the no-CSS case. */
+  .ci-cover {
+    order: -1;
     display: block;
-    text-decoration: none;
-  }
-
-  .collection-card-media {
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 3 / 2;
     overflow: hidden;
+    /* Also the fallback panel for a collection with no cover uploaded: the row
+       keeps its shape rather than collapsing to a text-only outlier. */
     background: var(--bg-secondary);
   }
 
-  .collection-card-media img {
+  .ci-cover img {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    /* --focus is the crop-corrected Sanity hotspot, written per image in the
+       markup; centre is the fallback when none is set. */
+    object-position: var(--focus, 50% 50%);
     transition: transform var(--dur-slow) var(--ease-out);
   }
 
-  .collection-card:hover .collection-card-media img {
-    transform: scale(1.05);
+  .ci-row:hover .ci-cover img {
+    transform: scale(1.03);
   }
 
-  .collection-card-title {
-    font-family: var(--font-serif);
-    font-size: 20px;
-    color: var(--text-primary);
-    margin: 16px 0 0;
-    letter-spacing: 0.02em;
+  .ci-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 clamp(14px, 1.8vw, 20px);
   }
 
-  .collection-card-meta {
-    font-size: 10px;
+  /* Metrics shared with .c-eyebrow-num on the homepage. */
+  .ci-index {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    color: var(--accent);
+  }
+
+  .ci-rule {
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--border-strong);
+  }
+
+  .ci-count {
+    flex: none;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    letter-spacing: 0.13em;
     color: var(--text-secondary);
-    margin: 5px 0 0;
   }
 
-  .empty {
-    padding: 80px 52px var(--space-section);
-    text-align: center;
-    color: var(--text-secondary);
-    background: var(--bg-primary);
+  .ci-name {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(32px, 3.6vw, 52px);
+    line-height: 1.1;
+    color: var(--accent);
   }
 
-  @media (max-width: 700px) {
-    .page-head {
-      padding: 120px 24px 24px;
+  .ci-place {
+    margin: clamp(10px, 1.4vw, 14px) 0 0;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .ci-tagline {
+    margin: clamp(18px, 2.2vw, 26px) 0 0;
+    max-width: 42ch;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  .ci-cta {
+    display: inline-block;
+    margin-top: clamp(22px, 2.8vw, 32px);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 3px;
+    transition: opacity var(--dur-base) ease;
+  }
+
+  .ci-empty {
+    max-width: 1152px;
+    margin-inline: auto;
+    padding: clamp(56px, 8vw, 96px) 24px 0;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  .ci-empty a {
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  /* Two columns and the alternation. Odd rows lead with the cover on the left;
+     even rows mirror it. One markup order, repositioned by grid-column — never
+     a second copy of the row hidden at the other breakpoint. */
+  @media (min-width: 1024px) {
+    .ci-row {
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(48px, 5vw, 88px);
+      align-items: start;
     }
 
-    .collections-grid {
-      grid-template-columns: 1fr;
-      gap: 32px;
-      padding: 0 24px var(--space-section-m);
+    .ci-cover {
+      order: 0;
+      grid-row: 1;
+      grid-column: 1;
+    }
+
+    .ci-text {
+      grid-row: 1;
+      grid-column: 2;
+    }
+
+    .ci-row:nth-child(even) .ci-cover {
+      grid-column: 2;
+    }
+
+    .ci-row:nth-child(even) .ci-text {
+      grid-column: 1;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .ci {
+      padding-bottom: var(--space-section-m);
+    }
+  }
+
+  /* Hover-scale is decoration on a photograph, and the arrow nudge is the only
+     other motion here — both drop out entirely rather than shortening. */
+  @media (prefers-reduced-motion: reduce) {
+    .ci-cover img,
+    .ci-arrow {
+      transition: none;
+    }
+
+    .ci-row:hover .ci-cover img,
+    .ci-cta:hover .ci-arrow,
+    .ci-cta:focus-visible .ci-arrow {
+      transform: none;
     }
   }
 </style>
