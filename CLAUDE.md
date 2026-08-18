@@ -191,7 +191,8 @@ const data = parsed.data
 
 ### Zod schema notes
 - **Every optional field is `.nullish()`, never `.optional()`** — GROQ returns `null` (not `undefined`) for anything unset in Studio, and `.optional()` rejects `null`, which makes `parseList` drop the whole document. Instances: `artwork.collection` (also shaped to accept both the dereferenced `{title,slug}` and the raw `{_ref}`), and `image.hotspot` / `image.crop` on `artwork.image` and `collection.coverImage`.
-- `collection.artworkCount`: `z.number().optional()` — computed field from GROQ, would be stripped otherwise.
+- `collection.artworkCount`: `z.number().nullish()` — computed field from GROQ, would be stripped otherwise. `.nullish()`, not `.optional()`, per the rule above: `count()` returns `null` (not undefined) for a collection whose `artworks` array was never set.
+- `collection.artworks[].image`: `.nullish().catch(null)`. The `.catch()` is required, not stylistic — this field is validated by a single `safeParse` on one document (`collections/[slug].astro`), *not* by `parseList`, so there is no per-item damage containment above it. Without the catch, one image object missing `asset` fails the item → the array → the whole collection → and the detail page redirects away. The catch degrades it to a missing thumbnail instead.
 
 ### Image URLs
 ```typescript
@@ -246,14 +247,13 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 ```
 Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
               (run `npm run build` output for current count)
-Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main —
-              see Deployment note below: latest work not yet merged)
+Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
 Sanity:       webhook → Cloudflare deploy hook, live
-TS errors:    0 (confirmed 2026-08-14 after collections-index rebuild +
-              works-head alignment — see SESSIONS.md same date)
+TS errors:    0 (confirmed 2026-08-18 after collection-detail resilience
+              pass — see SESSIONS.md same date)
 Not verified: 700px breakpoint boundary pixel-exact (works-head/gallery
               rail split)
-Build:        clean (see note above)
+Build:        clean — 36 pages
 ```
 
 ---
@@ -267,10 +267,6 @@ Phase 3 is **done** — the site is live and rebuilds automatically:
 5. ✅ Sanity webhook → Cloudflare deploy hook (auto-rebuild on publish)
 
 **Remaining — Phase 4:** custom domain `tartbyrj.com` → DNS to Cloudflare Pages
-
-**Note:** collections-index redesign + works-head alignment (2026-08-14)
-committed to `all-works`, not yet merged to `main` — not live on
-tartbyrj.pages.dev until merged.
 
 ## Phase 2 Features (not yet built)
 - Contact/inquiry form — Formspree (placeholder at /contact)

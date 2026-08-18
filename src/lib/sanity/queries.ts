@@ -45,10 +45,27 @@ export const ARTWORK_BY_SLUG_QUERY = `
 // read as a broken image rather than as graceful degradation. Such collections
 // stay reachable via /collections and /collections/[slug], and rejoin this
 // section on their own once a cover is uploaded in Studio.
+// The counted filter, not a bare count(artworks): the raw array counts every
+// reference, including ones pointing at a draft or deleted artwork. Those
+// dereference to null in COLLECTION_BY_SLUG_QUERY and are filtered out before
+// render on the detail page, so a bare count lets this label promise "3 works"
+// while the collection's own page shows one.
+//
+// Both halves of the filter mirror what collections/[slug].astro actually
+// renders — its filter is Boolean(artwork?.slug?.current), which drops a
+// reference for either reason:
+//   defined(@->_id)           — deleted/draft artwork, dereferences to null
+//   defined(@->slug.current)  — artwork exists but was never given a slug in
+//                               Studio, so the detail page has no URL to link
+//                               and skips the card
+// Counting only _id let the second case through: the index said "3 works", the
+// collection page rendered 2. Keep this expression identical in both queries
+// below and in step with that render filter — three copies of one definition
+// is already one too many, and they only stay honest if they move together.
 export const COLLECTIONS_INDEX_QUERY = `
 *[_type=="collection"&&defined(coverImage.asset)]|order(year desc)[0...4]{
   title,tagline,slug,year,location,coverImage,
-  "artworkCount":count(artworks)
+  "artworkCount":count(artworks[defined(@->_id) && defined(@->slug.current)])
 }
 `;
 
@@ -74,11 +91,14 @@ export const COLLECTIONS_INDEX_QUERY = `
 // defined(slug.current) matches COLLECTION_NEIGHBOURS_QUERY: every row here
 // links to /collections/<slug>, and that route is only built for collections
 // with a slug. Without this, a slug-less draft ships a link to a 404.
+//
+// artworkCount's filter is the same expression as COLLECTIONS_INDEX_QUERY's —
+// see the note there for why both halves are required. The two must not drift.
 export const COLLECTIONS_ALL_QUERY = `
 *[_type=="collection"&&defined(slug.current)]|order(year desc){
   title,tagline,slug,year,location,
   "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop}),
-  "artworkCount":count(artworks)
+  "artworkCount":count(artworks[defined(@->_id) && defined(@->slug.current)])
 }
 `;
 
@@ -127,10 +147,22 @@ export const COLLECTION_NEIGHBOURS_QUERY = `
 }
 `;
 
+// coverImage carries the same select(defined(...)) guard as
+// COLLECTIONS_ALL_QUERY, and for a sharper reason: this document is validated
+// by a single safeParse in collections/[slug].astro, and a failure there is a
+// redirect to /collections — the collection becomes unreachable, not just
+// absent from an index. CollectionSchema.coverImage requires `asset` and has no
+// .catch(null), so a half-populated image object (an API/import write, or an
+// asset removed out of band — Studio cannot author one) would take the whole
+// page down. select() with no fallback clause returns null instead, which the
+// page's empty floor already handles as "no cover". The guard lives here rather
+// than in Zod for the same reason it does on COLLECTIONS_ALL_QUERY (§19):
+// failing in the projection is cheap and local.
 export const COLLECTION_BY_SLUG_QUERY = `
 *[_type=="collection"&&slug.current==$slug][0]{
   title,tagline,slug,year,location,description,
-  coverImage,storyPages,
+  "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop}),
+  storyPages,
   artworks[]->{title,slug,image,medium,year,altText}
 }
 `;

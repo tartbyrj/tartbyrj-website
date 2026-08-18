@@ -18,6 +18,12 @@ type CollectionArtwork = NonNullable<NonNullable<Collection['artworks']>[number]
 // template can read artwork.slug.current without an extra guard per access.
 type LinkableArtwork = CollectionArtwork & { slug: { current: string } };
 
+// A storyPages item degrades to null (schema's .catch(null)) when Studio's
+// bare {_key, _type:'image'} — inserted the instant an editor clicks "Add
+// item" before uploading — has no `asset`. Filtered out below so the deck
+// never renders an empty plate for it.
+type StoryPage = NonNullable<NonNullable<Collection['storyPages']>[number]>;
+
 type Neighbour = CollectionNeighbour;
 
 export async function getStaticPaths() {
@@ -76,6 +82,14 @@ const raw = await client.fetch(COLLECTION_BY_SLUG_QUERY, { slug }).catch((error:
 const parsed = CollectionSchema.safeParse(raw);
 
 if (!parsed.success) {
+  // The redirect is silent to a visitor and silent in the build output too
+  // without this: the page becomes a redirect and /collections drops the same
+  // row via parseList, so a collection can vanish from the site with a clean
+  // Cloudflare log. The build log is the only place anyone would notice.
+  console.warn(
+    `[sanity] COLLECTION_BY_SLUG_QUERY (slug=${slug}): failed validation, redirecting to /collections —`,
+    parsed.error.issues
+  );
   return Astro.redirect('/collections');
 }
 
@@ -86,13 +100,27 @@ const collection = parsed.data;
    there is no separate cover slot in the render. Title, tagline, location and
    year come from Sanity fields and render as real page text instead, so
    numbering below is 1:1 with the array: plate index 0 is page "01 / N". */
-const storyPages = collection.storyPages ?? [];
+const storyPages = (collection.storyPages ?? []).filter(
+  (page): page is StoryPage => page != null
+);
 const plates = storyPages;
 const totalPages = storyPages.length;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const PLATE_W = 1920;
+// Deliberately higher than PLATE_W even though it currently buys nothing:
+// today's deck sources are 1920×1080 and `fit=max` never upscales, so this
+// URL and the plate's return byte-identical images (at the cost of a second
+// cache entry — the lightbox re-fetches on desktop rather than reusing the
+// decoded plate). Left at 3200 rather than lowered to match, because the
+// tracked deck re-export at 3840×2160 — the same item that fixes the
+// "Rupiyoti"→"Rupjyoti" typo baked into the deck pixels, see SESSIONS.md
+// "Not Verified" / "Next Session Candidates" — makes the gap real: at that
+// source, the plate stays a 1920 render and the lightbox delivers the
+// detail the full-screen view is for. Lowering it now would have to be
+// undone by that re-export, and silently under-serve the new assets if it
+// wasn't. Revisit only if the re-export is abandoned.
 const LIGHTBOX_W = 3200;
 // The deck exports at 16:9. Height attributes are derived, not measured, so
 // every image reserves its box before it loads and CLS stays at zero.
@@ -118,6 +146,25 @@ const eyebrow = eyebrowMeta ? `Archive Collection · ${eyebrowMeta}` : 'Archive 
 const artworks = (collection.artworks ?? []).filter(
   (artwork): artwork is LinkableArtwork => Boolean(artwork?.slug?.current)
 );
+
+// The filter above guarantees a slug, not a title — title is .nullish() on the
+// schema, so an artwork can pass it with nothing to display. The card's image
+// is alt="" by design (§8: the visible title is the link's accessible name), so
+// a null title left the <a> with no accessible name and nothing on screen. The
+// slug is the only other human-readable string on the item and is guaranteed
+// present here, so it stands in rather than shipping an empty link.
+const workLabel = (artwork: LinkableArtwork) =>
+  artwork.title?.trim() || artwork.slug.current;
+
+// Floor for a collection with no deck, no artwork refs and no statement —
+// distinct from a merely cover-less collection (§21's fallback panel), this
+// is the page having nothing else to render at all. Populated collections
+// are untouched: this only fires when plates, works and statement are all
+// empty at once.
+const isEmptyCollection = plates.length === 0 && artworks.length === 0 && !statement;
+const emptyCoverUrl = collection.coverImage?.asset
+  ? urlFor(collection.coverImage).width(1200).fit('max').format('webp').quality(85).url()
+  : null;
 
 /* ── Meta ───────────────────────────────────────────────────────────────────
    Every collection page used to ship Layout's generic site description, so
@@ -153,6 +200,25 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       <blockquote class="statement">{statement}</blockquote>
     )}
 
+    {isEmptyCollection && (
+      <section class="empty-floor">
+        {emptyCoverUrl && (
+          <img
+            class="empty-floor-img"
+            src={emptyCoverUrl}
+            alt=""
+            width="1200"
+            height="800"
+            loading="lazy"
+            decoding="async"
+          />
+        )}
+        <p class="empty-floor-copy">
+          More from this collection coming soon. <a href="/works">Browse all works →</a>
+        </p>
+      </section>
+    )}
+
     {plates.length > 0 && (
       <>
         <section class="deck-plates">
@@ -178,9 +244,11 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
         </section>
 
         {/* Phone: the plates stay in the DOM but are hidden, and this opens the
-            deck in the lightbox from page 01 instead. */}
+            deck in the lightbox from page 01 instead. Singular at exactly 1,
+            same rule as the works count on /collections (§21) — "1 pages"
+            reads as a typo, not as a feature. */}
         <button type="button" class="deck-cta" data-lb-open="0">
-          View collection — {totalPages} pages
+          View collection — {totalPages} {totalPages === 1 ? 'page' : 'pages'}
         </button>
 
         <noscript>
@@ -210,7 +278,7 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
                   visible text below, and descriptive alt here would make a
                   screen reader announce it twice (ARCHITECTURE.md §8). */}
               <div class="work-thumb">
-                {artwork.image && (
+                {artwork.image?.asset && (
                   <img
                     src={urlFor(artwork.image).width(800).height(800).fit('max').format('webp').quality(85).url()}
                     alt=""
@@ -221,7 +289,7 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
                   />
                 )}
               </div>
-              <p class="work-title">{artwork.title}</p>
+              <p class="work-title">{workLabel(artwork)}</p>
               {artwork.year && <p class="work-year">{artwork.year}</p>}
             </a>
           ))}
@@ -377,6 +445,48 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
     color: var(--text-primary);
   }
 
+  /* ── Empty floor ───────────────────────────────────────────────────────── */
+  /* Only when storyPages, artworks and statement are all empty/null at once
+     — see isEmptyCollection. Same plate width as .plate below, so a lone
+     cover reads as "a plate" rather than as a broken layout. */
+
+  .empty-floor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    padding: 0 24px clamp(72px, 10vh, 140px);
+    text-align: center;
+  }
+
+  /* aspect-ratio + object-fit: cover, matching .ci-cover on
+     /collections (§21) — not .plate-img's contain. coverImage has no
+     guaranteed ratio (unlike a 16:9 deck export), so the width/height
+     attributes on the tag alone would reserve a 3:2 box and then reflow to
+     the file's real shape on load. Pinning the ratio here makes the reserved
+     box the final box, and cover fills it. */
+  .empty-floor-img {
+    display: block;
+    width: min(1100px, 92vw);
+    aspect-ratio: 3 / 2;
+    max-height: 82vh;
+    object-fit: cover;
+    background: var(--bg-secondary);
+  }
+
+  .empty-floor-copy {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .empty-floor-copy a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+  }
+
   /* ── Plates ────────────────────────────────────────────────────────────── */
 
   .deck-plates {
@@ -461,8 +571,8 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
 
   /* Mirrors .rw-head / .rw-label on the homepage — same rule, same 22px, same
      eyebrow metrics, so the two pages read as one system (ARCHITECTURE.md §17).
-     justify-content keeps the right-hand slot open for the secondary item the
-     pattern allows; this section has none yet. */
+     justify-content holds the right-hand slot the pattern allows, filled here
+     by .works-head-link ("View all works"). */
   .works-head {
     display: flex;
     align-items: baseline;
@@ -774,18 +884,38 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
         }
       });
 
-      // A click that lands on the dialog element itself is a click on the
-      // backdrop — anything inside reports a descendant as the target.
-      dialog.addEventListener('click', (event) => {
-        if (event.target === dialog) dialog.close();
+      // Click-outside-to-close. The check is against the stage, not the
+      // dialog: .lightbox is padding:0 at 100vw/100vh and .lightbox-stage is
+      // width/height:100%, so the stage covers the dialog's entire content box
+      // and `event.target === dialog` can never fire — nor is there a visible
+      // ::backdrop region to click. Every click lands on the stage, the image,
+      // or a button. The stage's own padding plus the letterboxing around a
+      // contained image is the "outside" a visitor actually clicks, and that
+      // reports the stage as the target.
+      stage?.addEventListener('click', (event) => {
+        if (event.target === stage) dialog.close();
       });
 
       let startX = 0;
       let startY = 0;
+      // Whether the gesture in progress is still a single, uninterrupted
+      // finger. A second touch cancels it for good: without this, the pinch's
+      // second touchstart overwrote startX/startY, and touchend then measured
+      // whichever finger lifted first against the *other* finger's origin —
+      // a difference that clears the 45px threshold easily, so pinch-zooming
+      // a plate silently paged the deck. Checking Math.abs(dx) > Math.abs(dy)
+      // alone never caught this; the two fingers of a pinch are usually
+      // further apart horizontally than vertically.
+      let singleTouch = false;
 
       stage?.addEventListener(
         'touchstart',
         (event) => {
+          // touches is every finger currently down, changedTouches only the
+          // ones this event added. Both must be 1 for this to be the first
+          // finger of a fresh gesture.
+          singleTouch = event.touches.length === 1 && event.changedTouches.length === 1;
+          if (!singleTouch) return;
           startX = event.changedTouches[0].clientX;
           startY = event.changedTouches[0].clientY;
         },
@@ -795,16 +925,29 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       stage?.addEventListener(
         'touchend',
         (event) => {
+          // touches.length === 0 means this lift ended the gesture rather than
+          // being one finger of several coming up.
+          const ended = event.touches.length === 0 && event.changedTouches.length === 1;
+          const wasSingle = singleTouch;
+          if (event.touches.length === 0) singleTouch = false;
+          if (!wasSingle || !ended) return;
+
           const dx = event.changedTouches[0].clientX - startX;
           const dy = event.changedTouches[0].clientY - startY;
-          // Horizontal intent only, so a vertical scroll or a pinch does not
-          // page the deck.
+          // Horizontal intent only, so a vertical scroll does not page the
+          // deck. Pinches are already excluded by the guards above.
           if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
             show(dx < 0 ? index + 1 : index - 1);
           }
         },
         { passive: true }
       );
+
+      // A cancelled gesture (system gesture, call overlay) must not leave
+      // singleTouch armed for the next touchend.
+      stage?.addEventListener('touchcancel', () => {
+        singleTouch = false;
+      }, { passive: true });
 
       // Native dialog restores focus on its own in current browsers, but not
       // consistently in older Safari — and dropping focus to <body> loses the

@@ -26,11 +26,22 @@ export const CollectionSchema = z.object({
         .nullish(),
     })
     .nullish(),
+  // `.nullish().catch(null)` at the item level, same reasoning as
+  // `artworks[].image` above: Studio inserts a bare `{_key, _type:'image'}`
+  // the instant an editor clicks "Add item" before uploading, which fails
+  // `asset`'s required check. Without the catch, that one incomplete deck
+  // page fails the array, fails CollectionSchema, and redirects the whole
+  // collection page away — same single-safeParse, no-damage-containment
+  // situation as artworks[].image, since this document is also validated
+  // outside parseList.
   storyPages: z
     .array(
-      z.object({
-        asset: z.object({ _ref: z.string() }),
-      })
+      z
+        .object({
+          asset: z.object({ _ref: z.string() }),
+        })
+        .nullish()
+        .catch(null)
     )
     .nullish(),
   // Dereferenced via `artworks[]->{...}` (COLLECTION_BY_SLUG_QUERY). A
@@ -42,8 +53,28 @@ export const CollectionSchema = z.object({
   // both: this schema's job is only to keep safeParse from failing the whole
   // collection over one partial/unexpected artwork document, not to
   // guarantee shape for the template — that guarantee is the page's own
-  // runtime filter, same division of labour as ArtworkSchema.image being
-  // nullish while its inner hotspot/crop fields are required once present.
+  // runtime filter.
+  //
+  // `.catch(null)` is what actually makes that true, and it is not decoration.
+  // Unlike ArtworkSchema, this field is validated by a single safeParse on ONE
+  // document (collections/[slug].astro), not by parseList — so there is no
+  // per-item damage containment above it. Without a catch, one bad item fails
+  // the array, which fails CollectionSchema, which redirects the entire
+  // collection page away.
+  //
+  // It appears at two levels, and both are load-bearing:
+  //   · on `image` — an image object present but missing `asset` (an API/import
+  //     write, or an asset removed out of band; Studio cannot author it)
+  //     degrades to a missing thumbnail. `asset` stays required INSIDE the
+  //     object so urlFor() never receives a source it cannot resolve; the catch
+  //     converts that strictness into a local null.
+  //   · on the item object — every field is `.nullish()`, so *absent* data is
+  //     already contained, but a *wrong-typed* one is not: `year` arriving as
+  //     the string "2023" from an import fails the item, and without this catch
+  //     that single bad field would still cost the whole page. `.nullable()`
+  //     alone does not do this — it accepts a null GROQ hands us, it does not
+  //     convert a validation failure into null.
+  // One broken artwork must cost that artwork, not the page.
   artworks: z
     .array(
       z
@@ -60,12 +91,14 @@ export const CollectionSchema = z.object({
                 .object({ top: z.number(), bottom: z.number(), left: z.number(), right: z.number() })
                 .nullish(),
             })
-            .nullish(),
+            .nullish()
+            .catch(null),
           medium: z.string().nullish(),
           year: z.number().nullish(),
           altText: z.string().nullish(),
         })
         .nullable()
+        .catch(null)
     )
     .nullish(),
   // Computed by GROQ (count(artworks)) — declared so Zod doesn't strip it.

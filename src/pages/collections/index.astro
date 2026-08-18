@@ -5,15 +5,28 @@ import { parseList } from '../../lib/sanity/parse';
 import { COLLECTIONS_ALL_QUERY } from '../../lib/sanity/queries';
 import { CollectionSchema, type Collection } from '../../types/collection';
 
-const rawCollections = await client.fetch(COLLECTIONS_ALL_QUERY).catch(() => null);
+// Logged, not swallowed — same pattern as collections/[slug].astro. parseList
+// stays deliberately silent when raw is null (parse.ts), so without this a
+// Sanity outage or a malformed query ships this page's "still being
+// catalogued" empty state with a completely clean build log.
+const rawCollections = await client.fetch(COLLECTIONS_ALL_QUERY).catch((error: unknown) => {
+  console.error(
+    `[sanity] COLLECTIONS_ALL_QUERY: fetch failed — ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  );
+  return null;
+});
 
 const collections = parseList(CollectionSchema, rawCollections, 'collections index');
 
 const COVER_WIDTHS = [600, 900, 1200] as const;
 const COVER_BASE_W = 900;
 
-// >=1200px the two 1fr columns settle at ~528px inside the 1152px measure
-// (1152 - 48px gutters - 60px gap, halved). Below 1024px the row is a single
+// >=1200px the two 1fr columns settle at ~522px inside the 1152px measure
+// (1152 - 48px gutters - 60px gap, halved). 528 is declared below rather than
+// 522 — a slightly generous sizes hint only biases the browser toward the next
+// srcset candidate, which is the safe direction to round. Below 1024px the row is a single
 // column at the full content width. fit('max') caps delivery at the source
 // file's own resolution, so the 1200w candidate never upscales a smaller cover
 // — same reasoning as the plates on /collections/[slug] (§20).

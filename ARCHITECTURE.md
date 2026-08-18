@@ -1184,8 +1184,29 @@ section 8.
 Computed in `getStaticPaths()` via `COLLECTION_NEIGHBOURS_QUERY`
 (title + slug, `year desc`), which also supplies the paths themselves —
 replacing a separate slugs-only query so the generated routes and the
-neighbour links can't disagree about which collections exist. Section is
-skipped entirely with only one collection.
+neighbour links can't disagree about which collections exist.
+
+Three cases, not two — the count decides whether neighbours wrap:
+
+| Collections | Behaviour |
+|---|---|
+| `n <= 1` | Both null; the section is skipped entirely rather than linking back to the page you're already on |
+| `n === 2` | **No wrap.** Index 0 gets `next` only, index 1 gets `prev` only — exactly one link per page |
+| `n >= 3` | Wraps: the last collection's `next` is the first |
+
+The `n === 2` case is a real shipped bug, not a hypothetical: the
+wrap-around arithmetic `(i-1+n)%n` and `(i+1)%n` both resolve to the
+same index when `n` is 2, so both pages rendered a "Previous" and a
+"Next" pointing at the identical collection with different labels. It
+was live on the site (there are exactly 2 collections) until caught in
+code review.
+
+Because either link can now be absent, `.neighbours` must not use
+`justify-content: space-between` — that only positions correctly with
+exactly two children and collapses a lone "Next" to the left edge.
+Direction is pinned structurally instead: `.neighbour-next` carries
+`margin-left: auto`, so prev sits left and next sits right whether one
+or both are present.
 
 ---
 
@@ -1275,16 +1296,33 @@ solving it.
 
 ### `/works` head alignment
 
-`.works-head` (in `WorksGallery.astro`, shared by `/works` and every
-`/works/[...filter]` route) gets `padding-left` at `>=700px` equal to
-the gallery's year-rail column width — computed as
+`.works-head` and `.filter-bar` (in `WorksGallery.astro`, shared by
+`/works` and every `/works/[...filter]` route) each get `padding-left` at
+`>=700px` equal to the gallery's year-rail column width — computed as
 `calc(var(--rail-w) + var(--rail-gap))`, reusing the same custom
-properties `.year-group`'s `grid-template-columns` already consumes,
-not a new duplicate value. This aligns the eyebrow/h1 with the image
-column rather than the sticky year marker. Below 700px, where the rail
-splits into a single column, `.works-head` padding drops to 0 in the
-same media query — the two rules must stay on one shared breakpoint so
-they can't flip out of sync with each other.
+properties `.year-group`'s `grid-template-columns` already consumes, not a
+new duplicate value. This aligns the eyebrow/h1 and the filter chips with
+the image column rather than the sticky year marker. Below 700px, where
+the rail splits into a single column, the padding drops to 0 in the same
+media query — the rules must stay on one shared breakpoint so they can't
+flip out of sync.
+
+**Both selectors are load-bearing together.** The rule originally shipped
+on `.works-head` alone, which left the filter chips directly beneath the
+h1 at the old left edge — a ~124px jagged step, caught in code review.
+Any *left-aligned* direct child of `.works-inner` added later needs to
+join that selector list, or it reintroduces the same bug.
+
+**`.works-empty` is deliberately excluded**, and must stay excluded. It
+was briefly added to the list on the reasoning that "every direct child of
+`.works-inner`" belongs there, which is the wrong test — the right one is
+whether the child is a left-aligned row. `.works-empty` is centred text
+(`text-align: center`), and it only renders when there are no
+`.year-group` rows at all, so there is no rail on screen for it to align
+to. Left-only padding there shifts the message ~62px off its own centre
+and aligns it with nothing. Alignment to the rail applies to content that
+sits beside the rail; the empty state replaces the grid rather than
+sitting in it.
 
 `.works-eyebrow` was also brought to the same `font-size`/`letter-spacing`
 as `.ci-eyebrow` (11px, 0.22em) — this was unintentional drift between

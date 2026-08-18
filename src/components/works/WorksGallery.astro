@@ -329,12 +329,22 @@ const rootVars = [
     padding-top: calc(var(--nav-h) + 40px);
   }
 
+  /* The gap between eyebrow and h1 lives here, on the eyebrow's bottom margin,
+     not on .works-title's top — that is the rhythm both other eyebrow/title
+     lockups built this session already use (.ci-eyebrow, .intro-eyebrow), and
+     it keeps every title in the system at margin: 0. 14px matches
+     .intro-eyebrow exactly, which sits above the same
+     clamp(28px, 4vw, 44px) title tier; .ci-eyebrow's larger
+     clamp(18px, 2.4vw, 28px) belongs to the bigger page-title tier and would
+     be too much air here. Without this the eyebrow sat flush against the h1's
+     cap height, since both were margin: 0 and .works-head supplies no gap of
+     its own. */
   .works-eyebrow {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.22em;
     color: var(--text-secondary);
-    margin: 0;
+    margin: 0 0 14px;
   }
 
   /* Sized as a section heading (matches the homepage's .about-heading tier),
@@ -531,8 +541,14 @@ const rootVars = [
     .works-head,
     .filter-bar {
       /* Same rail width + gap the grid below spends on .year-group's first
-         column, so the eyebrow, h1 and filter chips all align with the row
-         content rather than the year markers. */
+         column, so the eyebrow, h1 and filter chips align with the row content
+         rather than the year markers. Every *left-aligned* direct child of
+         .works-inner belongs in this list — leaving one out is what caused the
+         .filter-bar misalignment this rule originally shipped with.
+         .works-empty is deliberately excluded: it is centered text, and it only
+         renders when there are no .year-group rows at all, so there is no rail
+         on screen to align to. Adding left-only padding there would shift the
+         message off its own centre instead of aligning it with anything. */
       padding-left: calc(var(--rail-w) + var(--rail-gap));
     }
 
