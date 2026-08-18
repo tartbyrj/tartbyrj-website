@@ -6,6 +6,191 @@
 
 ---
 
+## Session: 2026-08-17 → 2026-08-18 — Collection detail resilience, empty-floor state, code-review rounds 6–8, merge + push to main
+
+### Completed
+- **storyPages[] / empty-collection floor** (first task this session):
+  `storyPages[]` items get `.nullish().catch(null)` — Studio's "Add item"
+  button inserts a bare `{_key, _type:'image'}` before upload, and
+  publishing at that moment previously failed `safeParse` and redirected
+  the whole collection page to `/collections`. `/collections/[slug]` also
+  gained an explicit floor: when `storyPages`, `artworks` and
+  `description` are all empty, it renders `coverImage` as a single plate
+  plus one line of copy ("More from this collection coming soon…")
+  instead of a near-blank page, falling back to text-only if `coverImage`
+  is null too. Verified against the real "Transforming Walls Into
+  Stories" document, which currently has no deck, no linked works and no
+  statement — confirmed in the build output that this collection now
+  renders the floor state instead of an empty page.
+- **Three rounds of `/code-review` (rounds 6–8 of an 8-round total —
+  rounds 1–5 predate this session, see 08-15 entry below) run against the
+  full branch diff before merge.** Each round surfaced real, verifiable
+  defects:
+  - *Round 6*: `.works-empty`'s centered text got asymmetric left-only
+    padding from the `.works-head`/`.filter-bar` rail-offset rule;
+    `.empty-floor-img` had no `aspect-ratio`, so a non-3:2 cover would
+    reflow on load; `artworkCount`'s GROQ filter didn't match the detail
+    page's render filter (an artwork with an `_id` but no slug was
+    counted but never shown); a stale code comment said `.optional()`
+    where the schema actually uses `.nullish()`.
+  - *Round 7*: lightbox click-outside-to-close was dead code
+    (`.lightbox-stage` covers the dialog's full content box, so
+    `event.target === dialog` could never fire); `COLLECTION_BY_SLUG_QUERY`
+    projected `coverImage` unguarded, so a half-populated cover could
+    redirect the whole page (worse than the index-page drop round 6's fix
+    guarded against); `artworks[]` item objects lacked the `.catch(null)`
+    their own schema comment claimed to provide; ARCHITECTURE.md §21 had
+    just been rewritten but contradicted the code it was rewritten to
+    match, in the same commit; "View collection — 1 pages" read as a
+    typo; a work card with a null `title` had no accessible name at all.
+  - *Round 8*: fixing round 7's stale comment introduced a second stale
+    comment 20 lines below it (deleted, not reworded); the eyebrow/title
+    margin change from round 6 left `.works-eyebrow` and `.works-title`
+    flush against each other; the swipe handler had no touch-count guard,
+    so a two-finger pinch on a deck plate could get misread as a
+    page-turn swipe; `safeParse` failures on `[slug].astro` and fetch
+    failures on `collections/index.astro` redirected/degraded silently
+    with nothing in the build log; the `artworkCount` fix from round 6
+    was itself undone by round 7's `.catch(null)` fix (a wrong-typed
+    field is now counted by GROQ but dropped client-side) — flagged as a
+    design decision, not patched blind, left deferred; `.sr-only` (also
+    flagged in round 7) remains unused — flagged again, still deferred.
+- Round 8's mechanical findings (margin, touch guard, two silent-failure
+  logs, `LIGHTBOX_W` documentation) fixed in a final pass; the two
+  design-scope findings (`<dialog>` fallback, `artworkCount` drift) and
+  the recurring `.sr-only` gap left deferred rather than patched under
+  time pressure.
+- Committed as `731f446` — every fix from this session's two tasks (the
+  storyPages/empty-floor work plus rounds 6–8) as one commit, message
+  documents the three deferred items so they aren't lost next session.
+- Merged to `main` as `7eeaed7`. Not a fast-forward — `main` carried a
+  merge commit (`d61daaa`, PR #5) not on `all-works` — but
+  `git diff all-works` on the merged tree came back empty: byte-identical,
+  not just conflict-free.
+- Pushed to `origin/main`: clean fast-forward `d61daaa..7eeaed7`, no
+  force. This triggers the Cloudflare Pages auto-deploy from `main`.
+  Deploy independently confirmed after the fact: curl'd
+  tartbyrj.pages.dev directly and diffed the served CSS/JS against a
+  fresh local build of main at 7eeaed7 — byte-identical file hash,
+  and four fixes from different review rounds (empty-floor CSS,
+  works-eyebrow spacing, pinch-guard JS, lightbox stage-target JS) all
+  present in the served output. Not a Cloudflare dashboard/build-log
+  check — content-hash equivalence, which is strong evidence the live
+  site is serving this commit and not a stale cache.
+- `npx astro check` (0 errors/warnings/hints) and `npm run build`
+  (36 pages, clean) run and passed at every stage: pre-fix, after each
+  round's fixes, and post-merge.
+- CLAUDE.md's Deployment section "not yet merged" note removed; Current
+  Build State block updated to match.
+
+### Decisions
+- Stopped the review loop at round 8 deliberately, not because it came
+  back clean — round 8 still found two functional bugs. Rounds 7 and 8
+  were each increasingly finding second-order effects of the *previous*
+  round's own fixes (round 7: stale comment + doc/code mismatch from
+  round 6's fixes; round 8: the `artworkCount` drift caused by round 7's
+  own `.catch(null)` fix) rather than independent pre-existing defects —
+  read as the review loop nearing convergence, and a real stopping
+  signal on its own terms, not just an arbitrary round cap.
+- `LIGHTBOX_W` (3200) left higher than `PLATE_W` (1920) despite both
+  currently producing byte-identical output (today's deck sources are
+  1920×1080, `fit=max` won't upscale) — documented as intentional
+  headroom for the tracked 3840×2160 re-export rather than lowered to
+  match, so a future session doesn't "fix" it right before the re-export
+  makes the gap real.
+- `.works-eyebrow` carries the restored gap as a bottom margin, not
+  `.works-title` as a top margin — matches the pattern both
+  `.ci-eyebrow`/`.ci-title` and `.intro-eyebrow`/`.intro-title` already
+  use, keeping every title at `margin: 0` rather than introducing a
+  fourth one-off spacing convention.
+- The `artworkCount` drift and the `<dialog>`-unsupported mobile fallback
+  were both left unpatched by explicit instruction rather than fixed
+  blind in the final round — both need a design decision (which surface
+  is authoritative; how to feature-detect and fall back), not a
+  mechanical one-liner.
+
+### Deferred (with concrete triggers)
+- **`artworkCount` count-vs-render-filter drift**: GROQ's `count()` can
+  check referential existence (`defined(@->_id)`, `defined(@->slug.current)`)
+  but can't see client-side Zod validation failures — a document that
+  fails item-level parsing (e.g. `year` arriving as a string) is counted
+  by GROQ but dropped by the page's render filter after `.catch(null)`.
+  Real fix is computing `artworkCount` from the parsed array's length
+  instead of a separate GROQ field, removing the duplicate source of
+  truth. Trigger: next session that touches either `artworkCount` query,
+  scoped as its own task.
+- **`<dialog>`-unsupported mobile fallback**: below 768px the deck is
+  reachable only through a button that opens a `<dialog>`; if `<dialog>`
+  isn't supported (iOS Safari < 15.4) or the module script fails to
+  load, the button does nothing and a phone visitor sees zero deck
+  content. Needs a feature-detection + fallback design, not a line edit.
+  Trigger: before public launch / domain connect (Phase 4).
+- **`.sr-only` / deck accessibility**: still zero consumers in `src/`.
+  Deck pages (Canva exports) carry all their content as pixels with no
+  text alternative — plates and the lightbox both ship `alt=""`. Flagged
+  again in rounds 7 and 8 of this session's review (also flagged in
+  earlier sessions per SESSIONS.md's Aug 13 entry) — a recurring tracked
+  gap, not a new finding each time. Real fix needs a caption/altText
+  field on the `storyPages` schema plus transcription content from RJ.
+  Trigger: when RJ next supplies deck content, or before public launch,
+  whichever comes first.
+
+### Escalate
+- **"Rupiyoti" typo** (should be "Rupjyoti") is baked into the Worlds
+  Within Walls deck's pixels and is live on `main`/tartbyrj.pages.dev via
+  that collection's cover thumbnail and lightbox — tracked since the
+  08-13/08-14 sessions, not newly discovered here. Still needs the deck
+  re-export at 3840×2160 with corrected spelling; this session did not
+  touch deck assets.
+- **"Worlds Within Walls" shows "1 work" against its 15-page deck** — not
+  a code bug, the collection genuinely has only one linked `artwork`
+  document in Sanity. Confirmed in this session's build output
+  (`/collections` renders "1 work" for this row). Needs Studio content
+  entry (RJ or KD), not a code change — do not "fix" by removing the
+  count display; the count is accurate to the data, the data is what's
+  incomplete.
+
+### Not Verified
+- 700px breakpoint boundary, pixel-by-pixel (carried over from the
+  08-14 entry, still not checked at the exact boundary)
+- `<dialog>`-unsupported fallback behavior on an actual iOS Safari < 15.4
+  device — reasoned about from code, not tested live
+
+### Next Session Candidates
+- Deck re-export (typo + resolution) — see Escalate above
+- Upload remaining ~14 artwork documents for Worlds Within Walls in Studio
+- `artworkCount` refactor (compute from parsed array length, drop the
+  separate GROQ field) — see Deferred above
+- `<dialog>` mobile fallback design — see Deferred above
+- Verify 700px breakpoint boundary in devtools
+
+---
+
+## Session: 2026-08-15 — Filter-bar rail alignment, prev/next duplicate fix, schema cleanup
+
+*(Reconstructed from commit messages `c348ea3` / `d1b7cfd` — no live
+session log was written at the time; not this session's own work, listed
+here only so the log has no gap before the entry above.)*
+
+### Completed
+- `.filter-bar` given the same `padding-left` rail offset as
+  `.works-head` at `>=700px` — it had none, so the filter chips sat at
+  the old left edge while the eyebrow/h1 above had already moved.
+- Collection prev/next neighbours no longer duplicate when exactly 2
+  collections exist: `(i-1+n)%n` and `(i+1)%n` resolve to the same index
+  at `n=2`, so both pages rendered two links pointing at the same
+  collection. `.neighbours` also stopped depending on `space-between`,
+  which broke with a single child.
+- `CollectionNeighbourSchema` consolidated to one definition in
+  `types/collection.ts` instead of an inline duplicate in `parseList()`.
+- `CollectionSchema.artworks` given a real per-item shape (nullish
+  fields, nullable items) so `[slug].astro`'s two `(artwork: any)` casts
+  could be removed.
+- `.sr-only`'s comment reworded to describe the mechanism generically
+  instead of citing the rejected `storyPages[0]`-as-cover design.
+
+---
+
 ## Session: 2026-08-14 — Collections index redesign, /works head alignment
 
 ### Completed
