@@ -889,6 +889,176 @@ passed on slice averages measured 3.39:1 locally over a single gold patch.
 Re-derive locally, not by average, if the source images, scrim opacity, or
 text alpha values change.
 
+### Footer redesign — three-column layout (2026-08-19)
+
+The single-row flex footer (logo · three links · copyright) became a
+two-tier layout: `.footer-tier1` is a three-column grid (Brand · Explore ·
+Connect), `.footer-tier2` is a thin bar (copyright left, back-to-top right)
+below a hairline divider. Driven by a real product gap, not a redesign for
+its own sake: every enquiry path on the site funneled to Instagram DMs, with
+no address a gallery or collector's assistant could put in a calendar
+invite. Connect column exists to fix that.
+
+**What's in each column, and why:**
+- **Brand** — the existing lockup, a one-line plain-language descriptor
+  (what Rupjyoti makes), and a location line (Dubai, UAE · Assam, India —
+  a real commercial fact for a muralist, and the only local-SEO signal on
+  the site).
+- **Explore** — the footer nav is now rendered by mapping the same
+  `navLinks` array the header uses (`Layout.astro`), not a second hardcoded
+  list. The footer previously held its own copy of Works/Collections/About,
+  which is exactly the kind of drift the Contact page's Instagram link
+  already suffered once (see `src/lib/site.ts` below). One array, two
+  render sites.
+- **Connect** — `mailto:` link, an availability line, and social icons
+  driven by `SOCIALS: SocialLink[]` in `src/lib/site.ts`
+  (`{label, href, icon}`; Instagram + Behance today). `icon` keys into a
+  `socialIcons` SVG registry beside `.footer-social` in `Layout.astro`;
+  `contact.astro`'s Instagram CTA looks up the same array by
+  `icon === 'instagram'` rather than holding its own copy. Adding
+  Facebook/WhatsApp later is one `SOCIALS` entry plus one registry entry —
+  real icon path data is unavoidable, so not literally one line, but no
+  footer markup edit either way.
+
+**`src/lib/site.ts` — new single source for outward contact points.**
+`email` (`siteContact`) and the `SOCIALS` array live in a typed module, not
+a Sanity singleton. §5's `siteSettings` schema was never registered, and
+registering one now to hold values that change roughly never would buy
+nothing at the cost of a fetch, a Zod schema, and a new failure mode on
+every page that renders the footer. The Contact page imports the same
+`SOCIALS` array the footer does — no more separate hardcoded Instagram copy.
+
+**`--footer-logo-h` revised down twice, and the old rationale revised with
+it.** 180px → 132px → **72px desktop / 44px mobile** (final). The original
+180px was chosen so the tagline baked into the lockup image's pixels stayed
+legible — its cap height is ~3.8% of the file, so 180px put it near 7px,
+"the point it stops being texture" (original §18 language). That floor no
+longer binds, for two reasons:
+
+1. The image is no longer the only carrier of that wording. The nav renders
+   "WHERE TASTE & ART BLENDS" as live text, and the Brand column now sets a
+   real descriptor line under the lockup. The image's internal tagline is
+   decoration; the `<Image>` `alt` text carries the full wording for anyone
+   who can't see it.
+2. Footer height is also the texture's crop control, and this is the
+   load-bearing reason. The plaster strip is ~8.6:1 under
+   `background-size: cover`, right-anchored. A **taller** footer scales the
+   strip **wider**, which crops **harder** — the gold/marble region that
+   lives in the strip's right quarter expands leftward, directly under the
+   Connect column. A shorter footer needs less horizontal scale to satisfy
+   `cover`, so less of the strip is cropped away and more of its width
+   becomes visible — the favorable direction. Measured: at 1440px the
+   visible slice of the strip grew from 31.8%→42.8% (light) and
+   34.6%→46.7% (dark) when the footer height was cut in the second pass.
+
+   `--footer-logo-h` is the preferred lever over `--footer-scrim` for this
+   reason — the scrim has a hard ceiling (tokens.css: past ~0.32 the
+   texture stops being visible and the 22KB buys a flat color), the height
+   lever doesn't. It does have a floor, though: see the plate-wide sweep
+   note below.
+
+**Total height, both viewports, both passes:** the first two-tier build
+measured 529px desktop / 922px mobile — close to the full viewport on a
+laptop screen. A second pass, using `--footer-logo-h`, `.footer-descriptor`
+max-width (34ch → 48ch, wrapping the same copy to two lines instead of
+three — a layout change, not a copy edit), and every vertical margin in the
+tier as levers, cut this to **392px desktop (−25.9%) / 690px mobile
+(−25.2%)**. No column, link, or line of copy was removed or hidden to hit
+this — height came entirely out of sizing and spacing.
+
+**Mobile texture dropped below 480px.** At 390px, `background-size: cover`
+scales the 8.6:1 strip to several multiples of the viewport width — what
+actually renders is a soft, largely flat gradient, not legible plaster.
+Measured: 4.9%/5.4% of the strip visible (light/dark) at that width. Below
+`479.98px`, the `--footer-texture` image layer is dropped from `footer`'s
+background-image entirely; the bleed gradient and `--footer-scrim` wash
+stay, so the plate still reads as a warm surface, without paying the 22KB
+fetch for an effect too small to resolve. `scripts/footer-contrast.mjs`
+carries a matching `TEXTURE_DROP_BELOW_VW = 480` constant so measurement
+and implementation can't drift apart.
+
+**Contrast — final sweep, all six viewport/theme configurations, worst
+window per configuration:**
+
+| Viewport | Theme | Tightest element | Ratio |
+|---|---|---|---|
+| 1440 | light | availability-12 | 6.48:1 |
+| 1440 | dark | navlink-16 | 5.70:1 |
+| 900 | light | availability-12 / copy-12 | 5.27:1 |
+| 900 | dark | navlink-16 | 10.82:1 |
+| 390 | light | place-12 / availability-12 / copy-12 | 12.30:1 |
+| 390 | dark | place-12 / availability-12 / copy-12 | 13.67:1 |
+
+390's numbers jumped after the texture-drop fix above — the script was
+initially still measuring a background nobody sees below 480px. Fixed in
+`scripts/footer-contrast.mjs` itself, not just the page.
+
+**Plate-wide worst window — independent of what's on it.** Swept the whole
+plate at both the old (332px) and new (392px, 1440 width) heights, both
+text tiers, both themes — "if something were placed at the single worst
+pixel on the plate, what would it get":
+
+| Theme | Height | `--footer-text` | `--footer-muted` |
+|---|---|---|---|
+| light | 332px | 5.77:1 | 5.26:1 |
+| light | 392px | 5.66:1 | 5.17:1 |
+| dark | 332px | 4.82:1 | 4.57:1 |
+| dark | 392px | 4.79:1 | 4.55:1 |
+
+Dark `--footer-muted` at 392px is 4.55:1 — essentially flat versus the
+332px baseline (a 0.02 drift), and still clears AA. **No content sits in
+that worst window today** — it's the empty gutter between the Brand and
+Explore columns. It's a latent trap, not a live failure: anyone adding text
+there (a fourth column, a wider Brand block) must re-run
+`scripts/footer-contrast.mjs` first. This is also the reason not to cut
+`--footer-logo-h` further without re-measuring — the margin above 4.5:1 is
+real but thin.
+
+**Two fixes landed in the same pass:**
+- `.footer-logo-text` (the `<Image>` fallback, dead path unless
+  `tart-logo.*` goes missing) used `var(--text-primary)` — a page token —
+  on the photographic surface. Now `var(--footer-text)`, matching every
+  other piece of footer text.
+- `#main-content:focus-visible` — the back-to-top control moves focus to
+  `<main>` (`tabindex="-1"`, added specifically for this), which fell
+  through to the browser's default blue outline rather than the site's gold
+  ring, because `global.css`'s `a:focus-visible` / `button:focus-visible`
+  rule can't reach a bare `<main>`. Added a scoped rule in `Layout.astro`
+  matching the global ring exactly (`outline: 2px solid var(--accent);
+  outline-offset: 3px`). Confirmed via `getComputedStyle` in both themes —
+  `#7a4f2a` light, `#c9a96e` dark.
+
+**Back-to-top is a real anchor** (`href="#main-content"`), not a
+JS-only control — it works with zero JavaScript, confirmed by loading
+`/contact#main-content` as a fresh navigation (bypasses the click handler
+entirely) and checking `document.activeElement === main`. The inline script
+upgrades this to a `prefers-reduced-motion`-aware smooth scroll and
+suppresses the hash from the address bar/history, but neither is required
+for the control to function.
+
+**Known follow-up, not yet fixed:** the in-code comments on `--footer-logo-h`
+(both the base rule and the `@media (max-width: 900px)` block) still cite
+96px/76px→52px as the final desktop/mobile values from an earlier tuning
+pass. The committed CSS values are 72px/44px, one iteration further than
+the comments describe. Update the comment text to match on next touch —
+don't "fix" the values back down to 96/76 to match the stale comment.
+
+### Rejected (footer content)
+- **Newsletter signup** — no ESP, no list, no privacy policy, no send
+  cadence. A box that goes nowhere is worse than no box.
+- **Multi-column sitemap / "Quick Links"** — the site has five pages; a
+  sitemap for five pages duplicates the Explore column next to it.
+- **Phone number / street address** — a home-studio address on a public
+  page is a safety and spam problem. City-level (Dubai, UAE · Assam, India)
+  is enough.
+- **Payment / trust badges** — no checkout exists yet.
+
+### Deferred (footer content)
+- **Privacy / Terms / Refund-Shipping policy** — not needed today: the site
+  sets no cookies and collects no data. Legally required the moment Phase 5
+  ships Stripe/Snipcart and Formspree. `.footer-tier2`'s bar layout has room
+  reserved for these links when that trigger hits.
+
 ---
 
 ## 19. All Works Page

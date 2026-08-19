@@ -76,9 +76,9 @@
   /* Footer-local overrides of --text-secondary / --text-muted. The page
      tokens are calibrated against flat --bg-primary and --bg-elevated; the
      footer is the one surface on the site with a photographic background,
-     and both tiers lose roughly a stop of contrast over it. Measured against
-     the darkest 5% slice of the scrimmed strip — the marble at the right
-     edge, which is exactly where .footer-copy lands.
+     and both tiers lose roughly a stop of contrast over it. Originally
+     measured against the darkest 5% slice of the scrimmed strip — the
+     marble at the right edge — back when .footer-copy sat there.
      These are set against a LOCAL worst case — 16×16px windows swept across
      the band where the text actually sits, at the strip's rendered scale —
      not against slice averages. The distinction is the whole ballgame on a
@@ -88,7 +88,22 @@
      Note the direction of travel in this theme: "more visible" here means
      DARKER. Raising the lightness of footer text on a cream plate lowers
      contrast — the intuition that brighter equals more legible only holds
-     on the dark theme. */
+     on the dark theme.
+     UPDATE (2026-08-19, tier2 redesign): .footer-copy no longer sits at the
+     right edge — footer-tier2 is `justify-content: space-between` with
+     .footer-copy on the LEFT and .footer-top (the new "Back to top" link,
+     --footer-text) on the right instead. Re-swept with
+     scripts/footer-contrast.mjs after the move: at 1440px .footer-copy is
+     no longer the tightest element in either theme (8.76:1 light / 11.62:1
+     dark — comfortably clear; the current tightest at 1440 is
+     .footer-availability at 6.45:1 light / .footer-top at 9.54:1 dark). At
+     the 900px single-column breakpoint .footer-copy is still among the
+     tightest — 4.78:1 light (availability) / 4.86:1 light (copy), both
+     still ≥4.5:1 — because at that width the whole plate reads closer to
+     flat and there is no longer a meaningfully darker "right edge" to be
+     near or away from. Numbers hold; re-run the script rather than trusting
+     this comment if the tier2 layout, scrim, or texture assets change
+     again. */
   --footer-text:   rgba(26, 20, 18, 0.94);
   --footer-muted:  rgba(26, 20, 18, 0.88);
 }

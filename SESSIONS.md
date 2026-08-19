@@ -6,6 +6,88 @@
 
 ---
 
+## Session: 2026-08-19 — Footer redesign: three-column layout, 25%+ height cut, contrast-verified
+
+### Completed
+- Footer rebuilt from single-row flex to two-tier layout: `.footer-tier1`
+  (3-col grid — Brand / Explore / Connect) over `.footer-tier2` (copyright +
+  back-to-top bar). Driven by a real gap: every enquiry path on the site
+  funneled to Instagram DMs, with no address a gallery or collector's
+  assistant could put in a calendar invite.
+- New `src/lib/site.ts` — single typed source for `email`, `instagram`,
+  `behance`. Footer and `contact.astro` both import it; the Contact page's
+  Instagram link had drifted from the footer's once already under the old
+  hardcoded-in-two-places setup.
+- Footer nav now maps the same `navLinks` array the header renders, instead
+  of a second hardcoded link list.
+- `--footer-logo-h` cut in two passes: 180px → 132px → **72px desktop /
+  44px mobile** (final). `.footer-descriptor` max-width widened 34ch → 48ch
+  (wraps the same copy to 2 lines instead of 3 — layout change, not a copy
+  edit; 48ch is an empirically-verified threshold, not eyeballed — 46ch
+  still measured 3 lines). Total footer height: 529px→392px desktop
+  (−25.9%), 922px→690px mobile (−25.2%). Nothing removed or hidden to hit
+  the target — height came from sizing/spacing only.
+- Texture image layer dropped below 480px viewport width — at that size
+  `cover` scaled the 8.6:1 strip to several multiples of viewport width, so
+  only 4.9–5.4% of it was ever visible (measured). Scrim + bleed stay.
+  `scripts/footer-contrast.mjs` carries a matching
+  `TEXTURE_DROP_BELOW_VW = 480` so tool and implementation can't drift.
+- Two fixes: `.footer-logo-text` fallback used `--text-primary` (page
+  token) on the photographic surface, now `--footer-text`.
+  `#main-content:focus-visible` fell through to the browser's default blue
+  outline on the back-to-top path (the global `a`/`button` focus-ring rule
+  can't reach a bare `<main>`) — added a scoped rule matching the site's
+  gold ring, confirmed via `getComputedStyle` in both themes.
+- Full contrast sweep (`scripts/footer-contrast.mjs`, 16×16px window
+  method) run across all 6 viewport/theme combinations post-change: every
+  element clears AA 4.5:1, tightest is 5.27:1 (900, light). Full table in
+  ARCHITECTURE.md §18.
+- Plate-wide worst-window sweep (independent of content) run at old (332px)
+  and new (392px) heights, both themes: confirms the height cut didn't
+  erode the surface's floor — dark `--footer-muted` moved 4.57→4.55:1, a
+  0.02 drift. Flagged as a documented trap: that worst window is the empty
+  gutter between Brand and Explore, no content sits there today, but it's
+  the number to re-check first if anything does.
+- `npx astro check`: 0 errors/warnings/hints. `npm run build`: clean,
+  36 pages.
+
+### Decisions
+- 11px column headings (`.footer-heading`) take `--footer-text` (0.94),
+  not `--footer-muted` (0.88) — the shared eyebrow spec (11px/0.22em,
+  `.ci-eyebrow`/`.works-eyebrow`) governs geometry only; footer color choice
+  is a separate axis. Verified: 11px heading clears AA with more margin
+  than the 12px copyright line in 4 of 6 configurations.
+- `--footer-logo-h`'s original 180px rationale (keep the lockup's baked-in
+  tagline legible) explicitly revised, not just overridden: the descriptor
+  line now carries that wording as live text, and the `<Image>` `alt`
+  attribute carries it for anyone who can't see the image, so the image's
+  internal tagline is decorative-only now.
+- `src/lib/site.ts` over a Sanity `siteSettings` singleton for contact
+  URLs — three values that change roughly never don't justify a schema, a
+  fetch, and a new failure mode on every page rendering the footer.
+
+### Rejected
+- Newsletter signup — no ESP, no list, no privacy policy; a box that goes
+  nowhere is worse than none.
+- Multi-column sitemap — five pages on the site, would duplicate Explore.
+- Phone number / street address — home-studio safety; city-level location
+  is enough.
+- Payment / trust badges — no checkout exists yet.
+
+### Deferred (with concrete trigger)
+- **Privacy / Terms / Refund-Shipping policy** — not needed while the site
+  sets no cookies and collects no data. Trigger: Phase 5 (Stripe/Snipcart +
+  Formspree) ships. `.footer-tier2` bar has room reserved.
+
+### Not Verified / follow-up
+- In-code comments on `--footer-logo-h` (base rule and the 900px media
+  block) still cite 96px/76px→52px from an earlier tuning pass; committed
+  values are 72px/44px, one iteration further. Comment text needs updating
+  to match on next touch — don't reverse the values to match the stale
+  comment.
+
+---
+
 ## Session: 2026-08-17 → 2026-08-18 — Collection detail resilience, empty-floor state, code-review rounds 6–8, merge + push to main
 
 ### Completed

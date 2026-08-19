@@ -1,5 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { SOCIALS } from '../lib/site';
+
+const instagram = SOCIALS.find((social) => social.icon === 'instagram')!.href;
 ---
 
 <Layout title="Contact">
@@ -10,7 +13,9 @@ import Layout from '../layouts/Layout.astro';
       Enquiries about commissions, workshops and available paintings currently go through
       Instagram. A direct enquiry form lands here in the next release.
     </p>
-    <a class="contact-button" href="https://www.instagram.com/TARTBYRJ/" target="_blank" rel="noopener noreferrer">
+    {/* Same source as the footer — SOCIALS in src/lib/site.ts. These two used
+        to hold separate hardcoded copies and drifted apart once. */}
+    <a class="contact-button" href={instagram} target="_blank" rel="noopener noreferrer">
       Message on Instagram
     </a>
 
