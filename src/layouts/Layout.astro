@@ -35,8 +35,9 @@ const fontFiles = [
 ];
 
 const navLinks = [
-  { label: 'Works', href: '/works' },
+  { label: 'Home', href: '/' },
   { label: 'Collections', href: '/collections' },
+  { label: 'Works', href: '/works' },
   { label: 'About', href: '/about' },
   { label: 'Contact', href: '/contact' },
 ];
@@ -107,7 +108,7 @@ const logo = Object.values(logoFiles)[0]?.default;
            — a speech-input user saying either line matches, and both lines get
            announced. A label here would replace that text wholesale. -->
       <a href="/" class="nav-logo">
-        <span class="nav-logo-text">T.ART by RJ</span>
+        <span class="nav-logo-text">T.ART <span class="nav-logo-accent">by</span> RJ</span>
         <span class="nav-logo-tagline">WHERE TASTE & ART BLENDS</span>
       </a>
       <div class="nav-right">
@@ -151,9 +152,11 @@ const logo = Object.values(logoFiles)[0]?.default;
         )}
       </div>
       <div class="footer-links">
-        <a href="/works">Works</a>
+        <a href="/">Home</a>
         <a href="/collections">Collections</a>
+        <a href="/works">Works</a>
         <a href="/about">About</a>
+        <a href="/contact">Contact</a>
       </div>
       <div class="footer-copy">© 2025 Rupjyoti Baruah</div>
     </footer>
@@ -426,7 +429,7 @@ const logo = Object.values(logoFiles)[0]?.default;
 
   .nav-logo-text {
     font-family: var(--font-serif);
-    font-size: 22px;
+    font-size: 26.62px; /* 24.2px +10% */
     font-weight: 400;
     letter-spacing: 0.02em;
     line-height: 1;
@@ -437,6 +440,11 @@ const logo = Object.values(logoFiles)[0]?.default;
        stylesheet uppercase their text; nothing in the current ancestor chain
        reaches this, and this rule is what keeps that true if one ever does. */
     text-transform: none;
+  }
+
+  .nav-logo-accent {
+    font-style: italic;
+    color: var(--accent);
   }
 
   /* The tagline is set to the exact width of the wordmark above it, so the
@@ -451,9 +459,9 @@ const logo = Object.values(logoFiles)[0]?.default;
      turn if the wordmark is ever resized. */
   .nav-logo-tagline {
     align-self: stretch;
-    margin-top: 5px;
+    margin-top: 8px;
     font-family: var(--font-sans);
-    font-size: 8px;
+    font-size: 10.16px; /* 9.24px +10% */
     font-weight: 400;
     letter-spacing: 0.06em;
     line-height: 1;
@@ -476,7 +484,7 @@ const logo = Object.values(logoFiles)[0]?.default;
   }
 
   .nav-links a {
-    font-size: 14px;
+    font-size: 15.4px; /* 14px +10% */
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-secondary);
