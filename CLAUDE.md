@@ -81,6 +81,9 @@ src/
   components/ui/ThemeToggle.astro
   lib/sanity/client.ts          ← Sanity client + urlFor() helper
   lib/sanity/queries.ts         ← all GROQ query strings
+  lib/site.ts                   ← SINGLE SOURCE for email/Instagram/Behance —
+                                    footer + contact.astro both import this,
+                                    never hardcode these values elsewhere
   styles/global.css             ← @import tokens.css, @font-face, base rules
   styles/tokens.css             ← ALL CSS custom properties (light + dark)
   types/artwork.ts              ← ArtworkSchema (Zod) + Artwork type
@@ -94,9 +97,14 @@ src/
                                     ARCHITECTURE.md §21)
     collections/[slug].astro    ← collection detail (storyPages + artworks)
     about.astro
-    contact.astro               ← v2 placeholder
+    contact.astro               ← form is v2 placeholder; IG link now reads
+                                    from lib/site.ts, not hardcoded
     studio/                     ← Sanity Studio (via @sanity/astro)
 public/fonts/                   ← self-hosted WOFF2 (7 files)
+scripts/footer-contrast.mjs     ← 16×16px window sweep over the rendered
+                                    footer plate — re-run before touching
+                                    footer colors, height, or the texture
+                                    breakpoint. See ARCHITECTURE.md §18.
 sanity.config.ts                ← Sanity Studio config
 ARCHITECTURE.md                 ← full project spec (source of truth)
 SESSIONS.md                     ← session log (read last 2 entries on start)
@@ -144,12 +152,22 @@ Full token list in `src/styles/tokens.css`.
 The footer — and only the footer — carries a painted-plaster photographic
 background, via `--footer-texture` / `--footer-scrim` / `--footer-text` /
 `--footer-muted` in `tokens.css`. Assets: `public/images/footer-{light,dark}.{avif,webp}`.
+Below 480px viewport width the texture image layer is dropped entirely (too
+small to resolve as texture at that scale) — scrim and bleed stay. See
+ARCHITECTURE.md §18.
 
 **The nav deliberately does not get this treatment.** `#nav` is
 `position: fixed` and sits over the hero and every artwork on scroll — a
 second painted surface there would permanently compete with the paintings.
 The footer is past the last artwork, so a textured band reads as "the wall
 the work is hung on" instead.
+
+**Footer layout (as of 2026-08-19):** two-tier, three-column
+(Brand / Explore / Connect) — not the original single-row flex. Explore
+renders from the same `navLinks` array the header uses; don't hand-write a
+second link list. Email + social URLs come from `src/lib/site.ts`, never
+hardcoded in a component. Full rationale, the height/crop tradeoff, and the
+contrast sweep results: ARCHITECTURE.md §18.
 
 If you touch footer colors or type sizes, don't reuse `--text-secondary` /
 `--text-muted` — those are calibrated for flat `--bg-primary` /
@@ -253,7 +271,13 @@ TS errors:    0 (confirmed 2026-08-18 after collection-detail resilience
               pass — see SESSIONS.md same date)
 Not verified: 700px breakpoint boundary pixel-exact (works-head/gallery
               rail split)
-Build:        clean — 36 pages
+Build:        clean (page count varies with live Sanity content — see
+              "Pages:" above; do not hardcode a number here, it will go
+              stale the next time a document is published/unpublished in
+              Studio. 2026-08-19: 31 at build time, was 36 earlier the same
+              session — confirmed this is Sanity-content-driven, not a
+              route regression: rebuilding a pre-session commit against
+              today's live dataset also returns 31)
 ```
 
 ---

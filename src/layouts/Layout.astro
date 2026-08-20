@@ -3,6 +3,7 @@ import '../styles/global.css';
 import { Image } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
 import ThemeToggle from '../components/ui/ThemeToggle.astro';
+import { siteContact, SOCIALS, type SocialLink } from '../lib/site';
 
 export interface Props {
   title: string;
@@ -35,11 +36,30 @@ const fontFiles = [
 ];
 
 const navLinks = [
-  { label: 'Works', href: '/works' },
+  { label: 'Home', href: '/' },
   { label: 'Collections', href: '/collections' },
+  { label: 'Works', href: '/works' },
   { label: 'About', href: '/about' },
   { label: 'Contact', href: '/contact' },
 ];
+
+// Inner markup for each .footer-social glyph, keyed by SocialLink['icon'].
+// Adding a network is one entry in SOCIALS (src/lib/site.ts) plus one entry
+// here — the <svg> wrapper, aria-label and link markup below stay untouched.
+const socialIcons: Record<SocialLink['icon'], string> = {
+  instagram: `
+    <rect x="3" y="3" width="18" height="18" rx="5.2" fill="none" stroke="currentColor" stroke-width="1.7" />
+    <circle cx="12" cy="12" r="4.1" fill="none" stroke="currentColor" stroke-width="1.7" />
+    <circle cx="17.1" cy="6.9" r="1.15" fill="currentColor" />
+  `,
+  behance: `
+    <path d="M3.4 6.6h4.9a2.6 2.6 0 0 1 0 5.2H3.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+    <path d="M3.4 11.8h5.4a2.9 2.9 0 0 1 0 5.8H3.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+    <path d="M14.6 7.4h6.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+    <circle cx="17.65" cy="14.3" r="3.3" fill="none" stroke="currentColor" stroke-width="1.7" />
+    <path d="M14.5 13.8h6.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+  `,
+};
 
 // Brand lockup, dropped into src/assets/ as `tart-logo.<ext>`. The footer is
 // its only remaining consumer — the top nav renders the wordmark as type.
@@ -50,6 +70,12 @@ const logoFiles = import.meta.glob<{ default: ImageMetadata }>(
   { eager: true }
 );
 const logo = Object.values(logoFiles)[0]?.default;
+
+// Computed at build time, not hardcoded. The literal this replaced read 2025
+// and had already gone stale. Static build, so this is the year of the last
+// deploy — which for a copyright notice is the correct semantics anyway, and
+// the Sanity webhook rebuilds often enough that it cannot drift far.
+const copyrightYear = new Date().getFullYear();
 ---
 
 <html lang="en">
@@ -107,7 +133,7 @@ const logo = Object.values(logoFiles)[0]?.default;
            — a speech-input user saying either line matches, and both lines get
            announced. A label here would replace that text wholesale. -->
       <a href="/" class="nav-logo">
-        <span class="nav-logo-text">T.ART by RJ</span>
+        <span class="nav-logo-text">T.ART <span class="nav-logo-accent">by</span> RJ</span>
         <span class="nav-logo-tagline">WHERE TASTE & ART BLENDS</span>
       </a>
       <div class="nav-right">
@@ -132,30 +158,111 @@ const logo = Object.values(logoFiles)[0]?.default;
       ))}
     </div>
 
-    <main>
+    <!-- id + tabindex="-1" exist for the footer's "back to top" link. The
+         tabindex makes <main> programmatically focusable without putting it in
+         the tab order, so the control can move focus to the top of the CONTENT
+         rather than leaving it stranded at the bottom of the page — or handing
+         it to the fixed nav, which would strand a keyboard user one Tab away
+         from re-entering the menu they just left. Not styled on :focus: only
+         a:focus-visible / button:focus-visible carry rings (global.css), so
+         this never paints an outline around the whole page. -->
+    <main id="main-content" tabindex="-1">
       <slot />
     </main>
 
     <footer>
-      <div class="footer-logo">
-        {logo ? (
-          <Image
-            class="footer-logo-img"
-            src={logo}
-            alt="T.ART by RJ — Where Taste & Art Blends"
-            width={320}
-            densities={[1, 2]}
-          />
-        ) : (
-          <span class="footer-logo-text">T.ART by RJ</span>
-        )}
+      <div class="footer-inner">
+        <div class="footer-tier1">
+          <div class="footer-col footer-brand">
+            <div class="footer-logo">
+              {logo ? (
+                /* The alt text carries the full lockup wording, including the
+                   tagline baked into the pixels. That matters more than it used
+                   to: --footer-logo-h (see the `footer {}` rule below for the
+                   current value and full cut history) dropped below the height
+                   at which the image's own tagline resolves, so the alt string
+                   is now the only place that wording exists in this element.
+                   See ARCHITECTURE.md §18. */
+                <Image
+                  class="footer-logo-img"
+                  src={logo}
+                  alt="T.ART by RJ — Where Taste & Art Blends"
+                  width={320}
+                  densities={[1, 2]}
+                />
+              ) : (
+                <span class="footer-logo-text">T.ART by RJ</span>
+              )}
+            </div>
+            <p class="footer-descriptor">
+              Murals, paintings and drawings by Rupjyoti Baruah — work made about the
+              people, places and living beings that carried a story first.
+            </p>
+            <p class="footer-place">Dubai, UAE · Assam, India</p>
+          </div>
+
+          <nav class="footer-col footer-explore" aria-labelledby="footer-explore-heading">
+            <h2 class="footer-heading" id="footer-explore-heading">Explore</h2>
+            {/* Driven by the same navLinks array the header renders. The footer
+                used to hold a second hardcoded copy of these five items, which
+                is a drift risk with no upside — the two lists have never
+                intentionally differed. */}
+            <ul class="footer-links">
+              {navLinks.map((link) => (
+                <li><a href={link.href}>{link.label}</a></li>
+              ))}
+            </ul>
+          </nav>
+
+          <div class="footer-col footer-connect">
+            <h2 class="footer-heading">Connect</h2>
+            <a class="footer-email" href={`mailto:${siteContact.email}`}>{siteContact.email}</a>
+            <p class="footer-availability">
+              Commissions, workshops and studio visits — enquiries welcome.
+            </p>
+            {/* Links, not buttons: they navigate. Each carries its own
+                accessible name via aria-label, because the only thing inside is
+                a decorative glyph — the SVGs are aria-hidden so a screen reader
+                never tries to describe the path data. rel="noopener noreferrer"
+                on both: target="_blank" without noopener hands the opened tab a
+                live window.opener handle back into this origin. */}
+            <ul class="footer-social">
+              {SOCIALS.map((social) => (
+                <li>
+                  <a
+                    href={social.href}
+                    aria-label={`T.Art by RJ on ${social.label}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      focusable="false"
+                      set:html={socialIcons[social.icon]}
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-tier2">
+          <p class="footer-copy">© {copyrightYear} Rupjyoti Baruah</p>
+          {/* Room reserved here for Privacy / Terms / Refunds. Not needed while
+              the site sets no cookies and collects nothing; required the moment
+              Phase 5 ships Stripe/Snipcart and Formspree. See ARCHITECTURE.md §18. */}
+          {/* A real anchor, so it works with no JS at all: #main-content is a
+              genuine element, and tabindex="-1" there means the native jump also
+              moves focus. The script below upgrades it to a smooth scroll and
+              suppresses the hash — see the IIFE near the other footer scripts. */}
+          <a class="footer-top" id="footer-top" href="#main-content">
+            Back to top
+            <span class="footer-top-arrow" aria-hidden="true">↑</span>
+          </a>
+        </div>
       </div>
-      <div class="footer-links">
-        <a href="/works">Works</a>
-        <a href="/collections">Collections</a>
-        <a href="/about">About</a>
-      </div>
-      <div class="footer-copy">© 2025 Rupjyoti Baruah</div>
     </footer>
 
     <script is:inline>
@@ -177,6 +284,36 @@ const logo = Object.values(logoFiles)[0]?.default;
         close.addEventListener('click', closeMenu);
         menu.querySelectorAll('a').forEach(function (a) {
           a.addEventListener('click', closeMenu);
+        });
+      })();
+
+      (function () {
+        // Back to top. The anchor already works without this — it points at a
+        // real element and would jump there natively. What the script buys is
+        // two things the bare anchor cannot do:
+        //   1. no hash. A native jump leaves #main-content in the address bar
+        //      and in history, so Back becomes "scroll down again" rather than
+        //      "previous page".
+        //   2. reduced-motion-aware smoothing. There is no global
+        //      scroll-behavior: smooth in this project (see global.css — the
+        //      only motion guard there covers .reveal), so smoothing is opted
+        //      into here, per-interaction, and only when the user allows it.
+        // Focus still moves, exactly as the native jump would: scrolling alone
+        // would leave a keyboard user's focus at the bottom of the page while
+        // the viewport sits at the top.
+        var link = document.getElementById('footer-top');
+        var main = document.getElementById('main-content');
+        if (!link || !main) return;
+
+        link.addEventListener('click', function (event) {
+          // Let modified clicks (new tab/window) fall through to the browser.
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+          // preventScroll, or the focus call yanks the viewport to <main>'s top
+          // instantly and the smooth scroll it is racing never gets to play.
+          main.focus({ preventScroll: true });
         });
       })();
 
@@ -284,6 +421,23 @@ const logo = Object.values(logoFiles)[0]?.default;
 <style>
   body {
     margin: 0;
+  }
+
+  /* Scoped here, not folded into global.css's a:focus-visible /
+     button:focus-visible rule — and that's fine, because #main-content is
+     declared directly in THIS component's markup, so Astro's scoped CSS
+     attaches its data-astro-cid attribute here and this selector matches. The
+     global.css rule had to be unscoped for the opposite reason: it targets
+     <a>/<button> elements that live in every OTHER component's markup, which
+     a Layout-scoped rule could never reach.
+     Without this, focusing <main> (the back-to-top target — see the footer
+     script) fell through to the browser's own UA-default outline instead of
+     the site's gold ring, the one visible seam where a focus target didn't
+     match every other focusable element on the page. */
+  #main-content:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 1px;
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -426,7 +580,7 @@ const logo = Object.values(logoFiles)[0]?.default;
 
   .nav-logo-text {
     font-family: var(--font-serif);
-    font-size: 22px;
+    font-size: 26.62px; /* 24.2px +10% */
     font-weight: 400;
     letter-spacing: 0.02em;
     line-height: 1;
@@ -437,6 +591,11 @@ const logo = Object.values(logoFiles)[0]?.default;
        stylesheet uppercase their text; nothing in the current ancestor chain
        reaches this, and this rule is what keeps that true if one ever does. */
     text-transform: none;
+  }
+
+  .nav-logo-accent {
+    font-style: italic;
+    color: var(--accent);
   }
 
   /* The tagline is set to the exact width of the wordmark above it, so the
@@ -451,9 +610,9 @@ const logo = Object.values(logoFiles)[0]?.default;
      turn if the wordmark is ever resized. */
   .nav-logo-tagline {
     align-self: stretch;
-    margin-top: 5px;
+    margin-top: 8px;
     font-family: var(--font-sans);
-    font-size: 8px;
+    font-size: 10.16px; /* 9.24px +10% */
     font-weight: 400;
     letter-spacing: 0.06em;
     line-height: 1;
@@ -476,7 +635,7 @@ const logo = Object.values(logoFiles)[0]?.default;
   }
 
   .nav-links a {
-    font-size: 14px;
+    font-size: 15.4px; /* 14px +10% */
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-secondary);
@@ -571,12 +730,31 @@ const logo = Object.values(logoFiles)[0]?.default;
     }
   }
 
-  /* The footer is where the lockup is finally allowed to be legible. The nav
-     carries the wordmark as type because nav height is a shared budget;
-     nothing here competes for vertical space, so the tagline gets enough
-     height to resolve. Tagline cap height is roughly 3.8% of the file's
-     height — 180px puts it near 7px, which is the point it stops being
-     texture. Tune --footer-logo-h. */
+  /* --footer-logo-h was 180px, chosen so the tagline baked into the lockup
+     image resolved: its cap height is ~3.8% of the file, so 180px put it near
+     7px, the point it stopped being texture. That floor NO LONGER BINDS —
+     see ARCHITECTURE.md §18. Two reasons. First, the image is no longer the
+     only carrier of that wording: the nav renders "WHERE TASTE & ART BLENDS"
+     as live text, and the brand column sets a real descriptor line under the
+     lockup, so the image's internal tagline is decoration and the <Image>
+     alt string holds the full wording for anyone who can't see it.
+     Second — and this is the load-bearing one — footer height is also the
+     texture's crop control. The strip is ~8.6:1 under background-size: cover,
+     so a taller footer scales it WIDER and the gold/marble region that lives
+     in the right quarter expands left, straight under the Connect column.
+     CURRENT VALUE: 72px desktop (44px at the 900px mobile breakpoint below).
+     History — this is the ONE place that tracks it, so it doesn't have to be
+     kept in sync across multiple comments: 180px → 132px → 96px → 72px,
+     across two cutting passes that together took total footer height down
+     ~25%+ via every lever available — lockup, prose measure, and every
+     vertical margin in the tier. See SESSIONS.md 2026-08-19 for why each cut
+     happened. Prefer this lever over --footer-scrim, which tokens.css caps at
+     ~0.32 (past that the texture is invisible and the 22KB buys a flat
+     colour). This one has no ceiling — but see the plate-wide sweep note in
+     ARCHITECTURE.md §18: even with no text sitting on it, the dark
+     --footer-muted plate-wide minimum is close enough to 4.5:1 that it should
+     not be cut further without re-measuring.
+     Never buy contrast by dimming --footer-muted; tokens.css forbids it. */
   /* --bleed is the depth of the dissolve at the top edge. The old treatment
      was a 1px --border hairline, which drew a line the eye reads as "the page
      stopped here". A textured band under a hairline looks pasted on. Fading
@@ -585,9 +763,9 @@ const logo = Object.values(logoFiles)[0]?.default;
      flat --bg-elevated block. The bleed is padding the content must clear,
      so it is added to padding-top rather than overlapping it. */
   footer {
-    --footer-logo-h: 180px;
+    --footer-logo-h: 72px;
     --bleed: 72px;
-    padding: calc(40px + var(--bleed)) 52px 40px;
+    padding: calc(20px + var(--bleed)) 52px 16px;
     background-color: var(--bg-primary);
     /* Three layers, top to bottom: the bleed, the scrim wash, the texture.
        The scrim is a two-stop gradient of one colour because linear-gradient
@@ -607,19 +785,65 @@ const logo = Object.values(logoFiles)[0]?.default;
       linear-gradient(var(--footer-scrim), var(--footer-scrim)),
       var(--footer-texture);
     background-size: 100% var(--bleed), cover, cover;
-    /* Right-anchored, not centered. The strip is ~8.6:1 and the footer is
-       ~260px tall, so cover scales it to ~2230px wide and crops hard — at
-       390px the visible slice is the right quarter. The gold and marble
-       incident lives in that right quarter; the left two-thirds is flat
-       plaster. Centering would show phones the flat part and crop away the
-       only region worth loading a 22KB image for. */
+    /* Right-anchored, not centered. The strip is ~8.6:1; at desktop/tablet
+       widths cover crops hard enough that only the texture's right portion
+       — where the gold/marble incident sits — is ever visible, and centering
+       would show the flat plaster instead. This layer is dropped below 480px
+       entirely (see the @media block after this rule's breakpoints) rather
+       than kept centered or right-anchored there: the single-column mobile
+       footer is tall enough that cover scales the strip to several multiples
+       of the viewport width, at which point what renders is a soft gradient
+       rather than legible texture either way. */
     background-position: top center, center, right center;
     background-repeat: no-repeat, no-repeat, no-repeat;
+  }
+
+  /* The footer element itself keeps carrying the background stack and the
+     bleed padding; layout happens one level in, so nothing here can disturb
+     the three-layer geometry above. */
+  .footer-inner {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: clamp(12px, 2.4vw, 28px);
+  }
+
+  /* Brand is widest — it carries the lockup plus a measure of prose. Explore is
+     narrowest: five short uppercase words. minmax(0, …) on every track because
+     a long email in column 3 would otherwise blow the grid out past 100% (the
+     default `auto` minimum refuses to shrink below max-content). */
+  .footer-tier1 {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: clamp(32px, 5vw, 72px);
+    align-items: start;
+  }
+
+  /* Column headings. Geometry — 11px / 0.22em / uppercase — is the spec
+     .ci-eyebrow and .works-eyebrow already share (CLAUDE.md); no third eyebrow
+     value enters the system.
+     Colour is NOT inherited from that spec, which uses --text-secondary and is
+     calibrated for flat backgrounds. It takes --footer-text (0.94), not
+     --footer-muted (0.88): those two rules are orthogonal — the shared eyebrow
+     convention governs geometry so a heading reads as the same component
+     across pages, while tokens.css governs colour on the one photographic
+     surface. Nothing obliges a footer eyebrow to take the muted token merely
+     because it is an eyebrow, and 0.94 puts 11px above the contrast the 12px
+     copyright already clears (the 4.5:1 bar is size-independent below the
+     large-text tier). The hierarchy is carried by the size drop, the tracking
+     and the rule beneath — never by alpha, which is the same argument
+     tokens.css makes when it says the tiers separate by size.
+     font-weight is spelled out because this is an <h2>: the UA default is bold,
+     and body is 300. 400 rather than 300 for the reason §18 gives for the 16px
+     link size — heavier strokes hold up against pixel-level variance on a
+     photograph in a way a contrast ratio does not capture. */
+  .footer-heading {
+    margin: 0 0 10px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--footer-text);
   }
 
   /* The texture is decoration with no informational content, and at 22KB it
@@ -646,7 +870,11 @@ const logo = Object.values(logoFiles)[0]?.default;
     font-weight: 400;
     letter-spacing: 0.02em;
     line-height: 1;
-    color: var(--text-primary);
+    /* --footer-text, not --text-primary: this fallback renders on the same
+       photographic surface as everything else in the footer, and
+       --text-primary is calibrated for flat backgrounds. Same reasoning as
+       .footer-heading above. */
+    color: var(--footer-text);
     text-transform: none;
   }
 
@@ -661,23 +889,128 @@ const logo = Object.values(logoFiles)[0]?.default;
     display: block;
   }
 
+  /* The descriptor the lockup's own baked-in tagline no longer carries at
+     132px. 16px and --footer-text put it in the same tier as .footer-links a,
+     which is where tokens.css's 16px/12px split wants readable prose. */
+  /* max-width widened from 34ch to 48ch — a layout change, not a copy edit.
+     The sentence is unchanged; a wider measure wraps it to two lines instead
+     of three, which is what actually pays for height here (the Brand column
+     was the tallest of the three, and this line was why). 48ch, not 44-46:
+     at 1440px (~490px column, ~53ch), the current copy needs the full top of
+     the authorized 44-48ch range to actually drop to 2 lines — 46ch measured
+     3 lines empirically. Verify with getClientRects() rather than eyeballing
+     if this copy or the column width ever changes; the line count doesn't
+     move linearly with ch the way it looks like it should.
+     THE 2-LINE WRAP DOES NOT HOLD ACROSS THE WHOLE DESKTOP RANGE. .footer-tier1
+     is `fr`-based (see the grid-template-columns rule above), so the Brand
+     column's rendered width — and therefore the line count at a fixed 48ch —
+     shrinks continuously as the viewport narrows toward the 900px breakpoint,
+     it is not just an 1440px-vs-900px binary. Measured with real
+     getClientRects() at several widths between the 900px collapse and 1440px:
+
+       viewport   brand column   descriptor lines   footer height
+       901px      291px          4                  386px
+       1050px     346px          3                  389px
+       1200px     401px          3                  392px
+       1300px     438px          3                  392px
+       1325px     447px          2                  392px
+       1440px     490px          2                  392px
+
+     So the 2-line wrap this comment describes only holds above roughly
+     1320px viewport width (~445px column) — below that, down through the
+     entire 901-1300px band, it's 3 lines, and right at the 901px edge it's
+     4. The height budget itself does NOT break, though: footer height stays
+     at or under the 392px target across the whole range regardless of line
+     count (the other cuts in this pass compensate), so there is no forced
+     follow-up here — but do not describe this as "wraps to 2 lines" without
+     qualifying the viewport range, and re-measure with the table method
+     above if the grid fractions, gap clamp(), or copy length change. */
+  .footer-descriptor {
+    margin: 12px 0 0;
+    max-width: 48ch;
+    font-size: 16px;
+    /* 1.6, the tight end of the authorized 1.6–1.7 range — the last lever,
+       used once the sizing/spacing cuts alone didn't reach target. Doesn't
+       touch contrast: line-height carries no ratio of its own. */
+    line-height: 1.6;
+    color: var(--footer-text);
+  }
+
+  /* 12px + --footer-muted — the same tier as .footer-copy, deliberately: this
+     is metadata about the studio, not a claim on the reader's attention. */
+  .footer-place {
+    margin: 8px 0 0;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--footer-muted);
+  }
+
   /* Declared after the base rule, not folded into the nav's media block above —
      that block sits earlier in the file, and an equal-specificity `footer` rule
      later in source order would override it. */
   @media (max-width: 900px) {
     footer {
-      --footer-logo-h: 120px;
+      /* 44px — for the crop reason on the base rule's comment (which is the
+         one place that tracks --footer-logo-h's full cut history), and
+         doubly so here: a single-column footer is the tallest arrangement
+         this layout produces, so it's also the one that widens the texture
+         most (moot below 480px specifically — see the image-layer-drop rule
+         further down — but this breakpoint runs 480–900px too, where the
+         texture is still present). Cut in the same height-reduction pass as
+         the desktop value; see that rule's comment. */
+      --footer-logo-h: 44px;
       /* A shallower bleed: the same 72px reads as a much larger share of a
          wrapped mobile footer, and the dissolve stops being an edge and
          starts being most of the block. */
       --bleed: 48px;
-      padding: calc(32px + var(--bleed)) 24px 32px;
+      padding: calc(12px + var(--bleed)) 24px 12px;
+    }
+
+    /* One column, same source order, everything on the same left edge. No
+       display: none anywhere in the footer and no second copy of any element —
+       the grid collapses, nothing is withheld from a narrow screen. */
+    .footer-tier1 {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
     }
   }
 
+  /* Below 480px the single-column footer is tall enough that background-size:
+     cover scales the ~8.6:1 strip to several multiples of the viewport width,
+     so what actually renders is a soft, largely flat gradient — the sweep at
+     390px measured just 4.9%/5.4% of the strip visible (light/dark). The
+     image layer is dropped entirely at this width: --bg-primary bleed and
+     --footer-scrim stay, so the footer still reads as a warm plate, just
+     without paying 22KB for texture too small to resolve as texture. Image
+     layer only — the gradient and scrim wash are untouched, and --bleed
+     itself is still off-limits (decorative, and not this lever's job). */
+  @media (max-width: 479.98px) {
+    footer {
+      background-image:
+        linear-gradient(
+          to bottom,
+          var(--bg-primary) 0%,
+          color-mix(in srgb, var(--bg-primary) 55%, transparent) 45%,
+          transparent 100%
+        ),
+        linear-gradient(var(--footer-scrim), var(--footer-scrim));
+      background-size: 100% var(--bleed), cover;
+      background-position: top center, center;
+      background-repeat: no-repeat, no-repeat;
+    }
+  }
+
+  /* Vertical, not the old horizontal row: this is a column in a three-column
+     tier now, and five uppercase items on one line would set the column's
+     min-content width far wider than its share. */
   .footer-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    gap: 24px;
+    flex-direction: column;
+    gap: 6px;
   }
 
   /* --footer-text, not --text-secondary. Identical intent, recalibrated for
@@ -692,7 +1025,14 @@ const logo = Object.values(logoFiles)[0]?.default;
      does not reach the WCAG large-text tier (18.66px bold / 24px regular),
      so the 4.5:1 requirement applies either way and the extra weight is
      bought for legibility, not to relax a threshold. */
+  /* inline-block + padding-block so each row is a ~27px target rather than the
+     19px the type alone would give — WCAG 2.5.8 wants 24×24, and the inline
+     exception does not apply to a stacked list like this one. The list gap was
+     cut to compensate, so the visual rhythm is unchanged. Size itself is
+     untouched: 16px is load-bearing per the note above. */
   .footer-links a {
+    display: inline-block;
+    padding-block: 4px;
     font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -728,8 +1068,122 @@ const logo = Object.values(logoFiles)[0]?.default;
      value, this size gap plus its position is what separates the two tiers —
      see the note in tokens.css before dimming it to restore the old gap. */
   .footer-copy {
+    margin: 0;
     font-size: 12px;
     color: var(--footer-muted);
+  }
+
+  /* Not uppercased and not tracked, unlike every other link in this footer: an
+     email address is a literal string a reader may need to transcribe, and
+     letter-spacing on an address makes the dot and the @ harder to place, not
+     easier. overflow-wrap so a long address breaks inside the column instead
+     of setting a min-content width the grid then has to honour. */
+  .footer-email {
+    display: inline-block;
+    padding-block: 4px;
+    font-size: 16px;
+    color: var(--footer-text);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  /* Same hover contract as .footer-links a, and for the same measured reason:
+     the text colour never moves to --accent (2.43:1 light / 2.82:1 dark), the
+     accent moves to the underline where it is decoration. */
+  .footer-email:hover,
+  .footer-top:hover {
+    color: var(--footer-text);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 6px;
+  }
+
+  .footer-availability {
+    margin: 6px 0 0;
+    max-width: 30ch;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--footer-muted);
+  }
+
+  .footer-social {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    gap: 12px;
+  }
+
+  /* 42px circles — comfortably past WCAG 2.5.8's 24×24, with the gap keeping
+     the targets from sharing an edge. The border is derived from --footer-text
+     via color-mix rather than reaching for --border-strong, which is calibrated
+     against flat backgrounds; deriving keeps it themed from one token, the same
+     pattern #nav.nav-glass and the bleed gradient already use. It is a
+     container, not the affordance — the glyph inside carries --footer-text at
+     full strength, so 1.4.11's 3:1 is met by the icon itself. */
+  .footer-social a {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--footer-text) 28%, transparent);
+    color: var(--footer-text);
+    transition: border-color var(--dur-base) ease;
+  }
+
+  .footer-social a:hover {
+    border-color: var(--accent);
+  }
+
+  .footer-social svg {
+    display: block;
+    width: 19px;
+    height: 19px;
+  }
+
+  /* The rule that divides the tiers. Derived from --footer-text for the same
+     reason as the social circles — --border/--border-strong are page tokens. */
+  .footer-tier2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px 28px;
+    flex-wrap: wrap;
+    padding-top: clamp(10px, 1.4vw, 14px);
+    border-top: 1px solid color-mix(in srgb, var(--footer-text) 18%, transparent);
+  }
+
+  /* 12px, matching .footer-copy across the bar. --footer-text rather than
+     --footer-muted because this one is interactive: a control a reader has to
+     find, not a line they read once. */
+  .footer-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-block: 6px;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--footer-text);
+    text-decoration: none;
+  }
+
+  .footer-top-arrow {
+    font-size: 14px;
+    line-height: 1;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+
+  .footer-top:hover .footer-top-arrow {
+    transform: translateY(-2px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .footer-top-arrow {
+      transition-duration: 1ms;
+    }
   }
 
 </style>
