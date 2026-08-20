@@ -2,7 +2,13 @@
 import Layout from '../layouts/Layout.astro';
 import { SOCIALS } from '../lib/site';
 
-const instagram = SOCIALS.find((social) => social.icon === 'instagram')!.href;
+const instagramSocial = SOCIALS.find((social) => social.icon === 'instagram');
+if (!instagramSocial) {
+  throw new Error(
+    "contact.astro expects a SOCIALS entry with icon: 'instagram' (src/lib/site.ts) — none found."
+  );
+}
+const instagram = instagramSocial.href;
 ---
 
 <Layout title="Contact">
