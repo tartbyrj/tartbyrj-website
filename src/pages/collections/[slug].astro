@@ -846,6 +846,8 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       const pad = (n: number) => String(n).padStart(2, '0');
       let index = 0;
       let trigger: HTMLElement | null = null;
+      const cursorDot = document.getElementById('cursor');
+      const cursorRing = document.getElementById('cursor-ring');
 
       // The only place a lightbox src is ever set. Nothing here runs until the
       // visitor opens the deck, so the w=3200 renditions are never fetched on
@@ -860,6 +862,14 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
         trigger = from;
         show(at);
         dialog.showModal();
+        // showModal() promotes the dialog to the browser's top layer, which
+        // paints above every regular-stacking-context element regardless of
+        // z-index — including the fixed-position custom cursor from
+        // Layout.astro. A *descendant* of the dialog still paints normally
+        // within it, though, so move the cursor nodes in rather than fight
+        // the top layer with CSS.
+        if (cursorDot) dialog.appendChild(cursorDot);
+        if (cursorRing) dialog.appendChild(cursorRing);
       }
 
       document.querySelectorAll<HTMLElement>('[data-lb-open]').forEach((el) => {
@@ -957,6 +967,11 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
         img!.removeAttribute('src');
         trigger?.focus();
         trigger = null;
+        // Move the cursor nodes back out to <body> — fixed positioning
+        // doesn't care where in the DOM they live, so this is just
+        // returning them to their default parent.
+        if (cursorDot) document.body.appendChild(cursorDot);
+        if (cursorRing) document.body.appendChild(cursorRing);
       });
     }
   }
