@@ -1036,12 +1036,11 @@ upgrades this to a `prefers-reduced-motion`-aware smooth scroll and
 suppresses the hash from the address bar/history, but neither is required
 for the control to function.
 
-**Known follow-up, not yet fixed:** the in-code comments on `--footer-logo-h`
-(both the base rule and the `@media (max-width: 900px)` block) still cite
-96px/76px→52px as the final desktop/mobile values from an earlier tuning
-pass. The committed CSS values are 72px/44px, one iteration further than
-the comments describe. Update the comment text to match on next touch —
-don't "fix" the values back down to 96/76 to match the stale comment.
+**Follow-up resolved:** this section previously flagged the in-code comments
+on `--footer-logo-h` (both the base rule and the `@media (max-width: 900px)`
+block) as still citing 96px/76px→52px as the final desktop/mobile values
+from an earlier tuning pass. Checked directly against `Layout.astro` — both
+comments now cite the current 72px/44px values. No outstanding action.
 
 ### Rejected (footer content)
 - **Newsletter signup** — no ESP, no list, no privacy policy, no send

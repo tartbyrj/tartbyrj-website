@@ -80,11 +80,11 @@
   Formspree) ships. `.footer-tier2` bar has room reserved.
 
 ### Not Verified / follow-up
-- In-code comments on `--footer-logo-h` (base rule and the 900px media
-  block) still cite 96px/76px→52px from an earlier tuning pass; committed
-  values are 72px/44px, one iteration further. Comment text needs updating
-  to match on next touch — don't reverse the values to match the stale
-  comment.
+- **Resolved** (external code review, same session): this entry originally
+  flagged the in-code comments on `--footer-logo-h` (base rule and the
+  900px media block) as still citing 96px/76px→52px from an earlier tuning
+  pass. Checked directly against `Layout.astro` — both comments now cite
+  the current 72px/44px values. No outstanding action.
 
 ---
 
