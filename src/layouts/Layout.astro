@@ -446,6 +446,16 @@ const copyrightYear = new Date().getFullYear();
     }
   }
 
+  /* A `<dialog>` opened with showModal() (the works-deck lightbox) is
+     promoted to the browser's top layer, which paints above every
+     normal-stacking-context element — including these fixed, high
+     z-index cursor nodes, even at z-index 9999. A *descendant* of the
+     dialog paints fine, though: top-layer promotion only lifts the
+     dialog element itself, its children still stack normally inside it.
+     So the lightbox script physically moves #cursor/#cursor-ring into
+     the dialog while it's open (and back out on close) instead of
+     fighting the top layer with CSS. */
+
   .cursor,
   .cursor-ring {
     position: fixed;
