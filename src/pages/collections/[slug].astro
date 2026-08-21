@@ -967,9 +967,12 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
         img!.removeAttribute('src');
         trigger?.focus();
         trigger = null;
-        // Move the cursor nodes back out to <body> — fixed positioning
-        // doesn't care where in the DOM they live, so this is just
-        // returning them to their default parent.
+        // Move the cursor nodes back out to <body>. Safe only because
+        // .lightbox has no transform/filter/perspective/contain — nothing
+        // that would make it the containing block for these fixed-position
+        // nodes — so re-parenting doesn't shift where they render; it's
+        // just returning them to their default spot in the DOM. If the
+        // dialog ever gains one of those properties, this needs a rethink.
         if (cursorDot) document.body.appendChild(cursorDot);
         if (cursorRing) document.body.appendChild(cursorRing);
       });
