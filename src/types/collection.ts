@@ -39,6 +39,13 @@ export const CollectionSchema = z.object({
       z
         .object({
           asset: z.object({ _ref: z.string() }),
+          // Author-supplied alt for the spread (schema field on the image
+          // object itself, so the bare `storyPages` projection in
+          // COLLECTION_BY_SLUG_QUERY already returns it — no GROQ change).
+          // .nullish() per the project rule: GROQ returns null, not undefined,
+          // for a field never filled in Studio, and every existing deck page
+          // predates this field.
+          alt: z.string().nullish(),
         })
         .nullish()
         .catch(null)

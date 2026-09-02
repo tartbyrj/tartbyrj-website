@@ -6,6 +6,122 @@
 
 ---
 
+## Session: 2026-09-02 (cont'd) — `/impeccable audit` of /artist, sitewide detector sweep, deck alt-text pipeline
+
+> **RESUMING? START HERE.** The fix queue below is the live to-do list. Items 1
+> and 1b are done and committed; 2–7 are not started. Everything needed to pick
+> up item 2 is in this entry.
+
+### Completed
+- **`/impeccable audit src/pages/artist.astro`** — scored **15/20 (Good)**.
+  A11y 3 · Performance 3 · Theming 3 · Responsive 3 · Integrity 3.
+  Implementation Integrity verdict: **PASS** (zero hex in ~700 lines of CSS,
+  two-voice type rule held, one-accent rule held, portrait ratio locked to the
+  source file). Full finding list is the fix queue below.
+- **Sitewide detector sweep** — `detect.mjs` over `src/pages src/layouts
+  src/components`: 66 findings across 8 files. Ran specifically to decide two
+  questions the single-page audit could not answer (see Decisions).
+- **Deck alt-text pipeline built and shipped** (fix queue item 1). `storyPages`
+  images now carry an author-supplied `alt`; the lightbox sets `img.alt` per
+  page and the plate buttons append it to their `aria-label`.
+- **`scripts/surface-contrast.mjs`** — new, committed. Generalises
+  `footer-contrast.mjs`'s 16×16px local sweep to any photographic text surface
+  by sampling a screenshot instead of re-rendering the background stack.
+  Written to measure the /artist intro (queue item 2) and to stop that method
+  being rebuilt from prose a third time. **Read its header before using it** —
+  it documents the two measurement traps that produced false numbers in this
+  session.
+
+### Fix queue — resume here
+
+| # | P | Finding | File | Status |
+|---|---|---|---|---|
+| 1 | P2 | Deck pages had no alt-text field at all | `sanity/schemas/collection.ts`, `types/collection.ts`, `collections/[slug].astro` | **DONE** |
+| 1b | — | Alt field `string` → `text` (rows 4) so Studio gives a textarea | `sanity/schemas/collection.ts` | **DONE** |
+| 2 | P1 | `.location` fails WCAG AA over the intro backdrop — **4.40:1 light / 4.47:1 dark**, needs 4.5 | `artist.astro:454-457` | **NEXT** |
+| 3 | P2 | `.available-item` `clamp(32px, 7.3vw, 88px)` — 88px is the largest type on the site, over DESIGN.md's 80px Display ceiling | `artist.astro:549` | not started |
+| 4 | P2 | `.available-cta` is **189×25px**, vs the 44px floor DESIGN.md states for chips. Passes WCAG 2.2 SC 2.5.8 (24px) by 1px | `artist.astro:555` | not started |
+| 5 | P2 | `.cursor` / `.cursor-ring` animate `width`/`height` — layout properties, on a mouse-tracking element, **sitewide** | `Layout.astro:474,482` | not started |
+| 6 | P3 | `will-change: transform` on `.backdrop` never released; stays set under reduced-motion where the script never runs | `artist.astro:312` | not started |
+| 7 | P3 | Off-scale radii: `2px`, `1px` (DESIGN.md scale is 0 / 6px / 999px) | `collections/[slug].astro:546`, `Layout.astro:440` | not started |
+| 8 | P3 | DESIGN.md "Elevation & Depth" still cites the cutout `drop-shadow` and framed-portrait `box-shadow` — both deleted; /artist now has **zero** shadows. Also still says "About page" | DESIGN.md | do LAST |
+
+Item 8 is deliberately last: regenerate DESIGN.md only after 2–7 land, or it
+documents a state that is about to change again.
+
+### Decisions
+- **88px vs DESIGN.md's 80px: the page is wrong, the doc is right.** Settled by
+  the sweep, not by taste. `88px` appears exactly once in the codebase
+  (`artist.astro:549`); `80px` appears once (the homepage hero Display, which
+  matches DESIGN.md); every other ceiling is ≤74px. DESIGN.md's claim that the
+  hero name is "the single largest text on the site" holds everywhere except
+  this one line. Fix by lowering the artist page.
+- **The CTA touch-target fix is local, not shared.** Three CTA classes exist
+  with three different sizes — `.available-cta` 13px/4px, `.ci-cta` 11px/3px,
+  `.collection-link` 10px. No shared class to fix once.
+- **No generated fallback alt text for deck pages.** A positional string
+  ("Page 03 of 15") would be a third announcement of what the dialog label and
+  the `aria-live` counter already say twice, while describing nothing. Empty
+  alt keeps the image decorative instead of adding noise. Rationale is
+  commented at the `pageAlts` definition so it is not "fixed" later.
+- **`alt` field is not `required()`** — mandatory would block publishing every
+  existing collection until all pages are back-filled.
+
+### Verified false positives — do not re-report
+- **`em-dash-overuse`** on `artist.astro` and `Layout.astro`. Measured: 53
+  em-dashes in artist.astro, **52 in code comments**, 1 in the meta
+  description. Layout.astro: 81 total, **71 in comments**. The detector counts
+  comments as body text. This rule is noise in this codebase.
+- **`broken-image`** on `collections/[slug].astro:326`. The static
+  `<img class="lightbox-img" alt="">` is correct — alt is assigned at runtime
+  by `show()`. Detector cannot see that.
+- **7 of 8 `design-system-font-size`** findings. DESIGN.md's *prose* documents
+  Body as "15–16px" and Label as "10–15px" — ranges. Its *sidecar* encodes
+  single values (16px, 11px). The detector reads the sidecar. `10px` is used 13
+  times across 5 files: settled convention, not drift. The sidecar needs
+  ranges; the code is fine.
+- **Two `<footer>` elements** on /artist do NOT create duplicate `contentinfo`
+  landmarks — `.colophon`'s nearest sectioning ancestor is `section.intro`, so
+  it maps to generic. Checked, not assumed.
+
+### How the contrast numbers were produced
+Production build only (`npm run build && npm run preview`), 1440px, both
+themes, `scripts/surface-contrast.mjs`. Two traps burned real time and are now
+documented in that script's header — repeating them produces confident wrong
+numbers, not obvious errors:
+1. **The Astro dev toolbar** is a dark floating pill that sits over page
+   content and gets sampled as background. It produced a 1.05:1 reading on
+   `.prose p` that survived until the region was cropped and eyeballed.
+2. **`visibility: hidden` on `.copy` alone does not hide the text** —
+   `.reveal.visible` re-asserts `visible` on descendants. The first sweep
+   measured ink glyphs against ink glyphs. Use `.copy, .copy *` and verify on
+   a leaf node.
+
+### Open — on RJ, not on code
+- **13 of 15 deck pages still have no alt text** (`Worlds Within Walls`). Two
+  are written and good — they transcribe the spread's words *and* describe the
+  painting, which is what WCAG 1.1.1 + 1.4.5 need for text-baked-into-pixels.
+  Studio path: Collections → Story Pages → each page → Alt text.
+- Nav tagline "WHERE TASTE & ART BLENDS" — **4th flag**. Still unresolved.
+
+### Rejected / Deferred
+- **Deck pixel page-numbering mismatch — dropped by decision.** Spread pixels
+  read "03 / 18" and "04 / 18" while the lightbox counter reads "01 / 15" and
+  "02 / 15"; both are visible at once. Needs a deck re-export, same batch as
+  the tracked "Rupiyoti" pixel typo. Explicitly deprioritised this session.
+- Sitewide per-page audits (`/impeccable audit` on the other 7 routes) — not
+  run. Only `/artist` was audited in depth; the detector sweep is mechanical
+  and does not measure contrast, touch targets, or responsive behaviour
+  anywhere else.
+
+### Next Session Candidates
+- Fix queue items 2 → 7, then 8
+- Re-run `/impeccable audit src/pages/artist.astro` to confirm the score moves
+- `/impeccable audit src/layouts/Layout.astro` — best value per run, since nav
+  and footer chrome ship on every page
+
+---
+
 ## Session: 2026-09-02 — Artist page: studio-photo rebuild + `/about` → `/artist` route rename
 
 ### Completed
