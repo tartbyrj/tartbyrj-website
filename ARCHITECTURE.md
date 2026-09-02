@@ -195,7 +195,8 @@ tartbyrj/
 │   │   ├── journal/
 │   │   │   ├── index.astro
 │   │   │   └── [slug].astro
-│   │   ├── about.astro
+│   │   ├── artist.astro         (the Artist page, at /artist)
+│   │   ├── about.astro          (redirect stub → /artist, no markup)
 │   │   ├── contact.astro        (v2 placeholder in v1)
 │   │   └── studio/
 │   │       └── [...index].astro (Sanity Studio at /studio)
@@ -317,7 +318,7 @@ seo            object
 > registered in `src/sanity/schemas/index.ts` (only `artwork`, `collection`,
 > `homepage` are), so no document of this type can be created in Studio.
 > `ABOUT_QUERY` (`src/lib/sanity/queries.ts`) queries this type anyway and
-> always resolves to `null`; the About page (`src/pages/about.astro`) runs
+> always resolves to `null`; the Artist page (`src/pages/artist.astro`) runs
 > entirely on its own local fallback content instead — biography paragraphs,
 > the statement, and the `availableFor` list are hardcoded there, not fetched.
 > A real `portrait` upload does work today independent of this schema, via a
@@ -384,7 +385,7 @@ Every page includes:
 | Homepage | `WebSite` + `Person` (Rupjyoti Baruah) |
 | Individual artwork | `VisualArtwork` |
 | Works index | `CollectionPage` |
-| About | `Person` |
+| Artist (`/artist`) | `Person` |
 | Exhibition | `ExhibitionEvent` |
 | Journal post | `BlogPosting` |
 
@@ -534,7 +535,7 @@ https://*.pages.dev        (Cloudflare preview URLs)
 | Email newsletter | Buttondown or ConvertKit | Low |
 | Workshop registration | Custom Stripe checkout | High |
 | Upcoming Exhibitions — homepage section 5 (`id="exhibitions"`) + dedicated `/exhibitions` page | `exhibition` Sanity schema (spec'd in §5, not yet registered in Studio) | Medium |
-| Register `aboutPage` Sanity schema so About page content (biography, statement, portrait, `availableFor`) is editable from Studio instead of hardcoded in `about.astro` | Sanity Studio schema | Low |
+| Register `aboutPage` Sanity schema so Artist page content (biography, statement, portrait, `availableFor`) is editable from Studio instead of hardcoded in `artist.astro` | Sanity Studio schema | Low |
 
 Phase 2 does not require rebuilding the site. Astro components bolt on.  
 Sanity `siteSettings` already has email field ready for Formspree routing.
@@ -712,6 +713,41 @@ comfortably on flat `--bg-primary`. Do not reference them outside `footer`.
 4. Add Zod type to `src/types/`
 5. Add nav link to Sanity `navigation` singleton or hardcode in Nav component
 6. Push to GitHub — auto-deploys
+
+### Renaming an existing route (developer workflow)
+
+The site is live, so a renamed route has inbound links, bookmarks and index
+entries pointing at the old path. **Leave a redirect stub behind — never just
+rename the file.**
+
+1. Rename `src/pages/old.astro` → `src/pages/new.astro`
+2. Update the `navLinks` array in `Layout.astro` — one array feeds both the
+   header and the footer's Explore column, so label and href change once
+3. Update any cross-links in other pages (`grep -rn "/old" src/`)
+4. Replace `src/pages/old.astro` with a redirect stub — frontmatter only, no
+   `<Layout>` and no markup:
+
+```astro
+---
+return Astro.redirect('/new', 301);
+---
+```
+
+Same `Astro.redirect()` used by `works/[slug].astro` and
+`collections/[slug].astro` when Sanity data fails to parse; the only
+difference is that those are conditional and a rename stub is unconditional.
+
+**On this static build there is no server to issue a real 3xx.** Astro emits an
+HTML stub carrying `<meta http-equiv="refresh" content="0;url=/new">` plus a
+`<link rel="canonical">`, and the browser follows that. The status argument is
+what a future SSR/hybrid adapter would send and is inert until then. If a true
+301 is ever needed on Cloudflare Pages, that is a `_redirects` file in
+`public/`, not this.
+
+**Done for `/about` → `/artist` on 2026-09-02.** `src/pages/about.astro` is now
+that stub; the page itself lives at `src/pages/artist.astro`. Note that
+`ABOUT_QUERY` kept its name — it is named for the `aboutPage` Sanity document
+type it queries, not for the route that consumes it.
 
 ### Never do these
 - Never use `cursor: default` override — custom cursor is brand
@@ -906,7 +942,7 @@ invite. Connect column exists to fix that.
   the site).
 - **Explore** — the footer nav is now rendered by mapping the same
   `navLinks` array the header uses (`Layout.astro`), not a second hardcoded
-  list. The footer previously held its own copy of Works/Collections/About,
+  list. The footer previously held its own copy of Works/Collections/Artist,
   which is exactly the kind of drift the Contact page's Instagram link
   already suffered once (see `src/lib/site.ts` below). One array, two
   render sites.
@@ -1272,8 +1308,8 @@ title, tagline, artist name baked into the image, `object-fit: contain`,
 `sr-only` HTML heading duplicated underneath for mobile. Dropped for two
 reasons:
 
-1. **RJ removed the splash page from this deck** (it duplicated the About
-   page's artist bio) — `storyPages[0]` became an interior content page
+1. **RJ removed the splash page from this deck** (it duplicated the Artist
+   page's bio) — `storyPages[0]` became an interior content page
    ("Observation," a numbered field-notes spread), rendered full-viewport
    as if it were an entrance. Wrong page doing the wrong job, at the
    largest size on the site.

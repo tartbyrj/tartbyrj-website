@@ -6,6 +6,108 @@
 
 ---
 
+## Session: 2026-09-02 — Artist page: studio-photo rebuild + `/about` → `/artist` route rename
+
+### Completed
+- Route rename: `src/pages/about.astro` → `src/pages/artist.astro`. Nav +
+  footer label "About" → "Artist" (one `navLinks` entry in `Layout.astro`
+  feeds both; label stays mixed-case and is uppercased by the existing
+  `.nav-links a` / `.footer-links a` rules — no new casing introduced).
+  Redirect stub at `/about` → `Astro.redirect('/artist', 301)`. Verified
+  live: `/about` lands on `/artist`.
+- The stub emits, on a static build:
+  `<meta http-equiv="refresh" content="0;url=/artist">` +
+  `<link rel="canonical" href="/artist">` + `noindex` + a manual anchor
+  fallback. The `301` argument is inert until an SSR/hybrid adapter exists
+  — it is what a real server *would* send. Dev server does issue a true 301
+  (there is a server), so don't read dev behaviour as proof of prod.
+- Updated: `Layout.astro` (navLinks entry + the nav-offset comment listing
+  `150px /about`), `index.astro` (Artist teaser link + one comment
+  cross-ref), CLAUDE.md, ARCHITECTURE.md, PRODUCT.md,
+  `src/assets/artist/README.md`, `src/assets/about/README.md` — all
+  `/about` refs swapped. Page shell class `.about` → `.artist` (markup +
+  base rule + dark-theme rule). Zero `href="/about"` left anywhere in
+  `dist/`.
+- **New in ARCHITECTURE.md §15: "Renaming an existing route (developer
+  workflow)."** Written this session — the redirect-stub pattern was not
+  documented before, so anything referring to it "per ARCHITECTURE.md"
+  points at a section authored here, not a pre-existing rule.
+- `ABOUT_QUERY` name kept as-is — named for the unregistered `aboutPage`
+  schema type, not the route. `src/assets/about/` folder name also kept —
+  pure churn to rename, no functional gain. Both documented inline.
+- Artist page hero image rebuilt: cutout PNG → full studio photo
+  (`src/assets/artist/rupjyoti-portrait.jpeg`, renamed from a
+  double-extension upload). `object-fit: contain`,
+  `aspect-ratio: 1023/1537` (source's true ratio), border
+  `1px solid var(--border-strong)` applied directly to
+  `.portrait :global(img)` — not a wrapper, since `object-fit: contain` +
+  locked ratio makes img edge = box edge. `:global()` is required: the
+  `<img>` comes from Astro's `<Image>` and carries no scope attribute.
+- **If the portrait source is ever swapped, update the `aspect-ratio` pair
+  to match the new file.** `contain` letterboxes a mismatch rather than
+  cropping it — visible, but still wrong. Noted in the CSS and in
+  `src/assets/artist/README.md`.
+- New content shell: `.intro-shell`, `max-width: 1500px; margin: 0 auto` —
+  the only centring mechanism, horizontal only. `.intro` stays full-bleed
+  so the plaster texture runs edge to edge past the cap. Desktop is
+  `grid-template-columns: 40fr 60fr` with `align-items: start` (fr, not %,
+  so the ratio holds at ultra-wide). 40 over 45: at the 1500px cap 40 gives
+  a 578×868px photo; 45 puts it near 980px tall and lets the photograph
+  outweigh the text beside it.
+- All old cutout code removed: `--portrait-lift`, `.is-cutout`,
+  `.is-framed`, the `aspect-ratio: 4/5` branch, `object-position: bottom`
+  crop, plus `--portrait-col` / `--portrait-nudge-x` / `--copy-nudge-x`
+  (transform hacks that only existed to place a free-standing cutout).
+  Confirmed via grep — zero hits anywhere in repo or docs. `artist-cutout.png`
+  and `scripts/key-artist-cutout.mjs` still exist on disk but are no longer
+  imported by anything; both READMEs now say so and mark them safe to delete.
+- Verified both breakpoints: desktop 27" — full body incl. feet, no crop.
+  Mobile/small screen — photo truncated only by normal scroll (page taller
+  than viewport), not a CSS bug; full image visible on scroll.
+- Measured in Chrome, shell width / L·R margin / image box / rendered-vs-
+  natural ratio delta: **1280** 1126.4 / 76.8·76.8 / 435.2×653.9 / −0.03% ·
+  **1440** 1267.2 / 86.4·86.4 / 489.6×735.6 / +0.02% · **1920** 1500 capped
+  / 210·210 / 577.6×867.8 / −0.04% · **2560** 1500 capped / 530·530 /
+  577.6×867.8 / −0.04%. Deltas are sub-pixel rounding — no distortion, and
+  the photo is byte-identical at 1920 and 2560 as intended. Stacks at 899px
+  (image capped 420px, centred), grid at 900px. `scrollWidth` never exceeds
+  viewport at any width tested.
+- `npx astro check` 0 errors / 0 warnings / 0 hints (34 files).
+  `npm run build` clean, **32 pages** (was 31 — the `/about` stub adds one).
+
+### Decisions
+- Chose full studio photo over cutout extraction — no background-removal
+  rework needed, zero re-crop risk, ships faster
+- Border on image itself, not container — avoids double-box, geometry stays
+  exact
+- Redirect via `Astro.redirect()` accepted as meta-refresh (not true 301) —
+  consistent with the existing static-build limitation, not a new gap. If a
+  real 301 is ever needed on Cloudflare Pages that is a `_redirects` file in
+  `public/`, not this stub.
+- Breakpoint reused, not invented: 900px was already `about.astro`'s own
+  intro-stack threshold
+
+### Rejected / Deferred
+- Renaming `ABOUT_QUERY` / `src/assets/about/` — rejected, would create
+  schema-name mismatch / pure-churn risk for no gain
+- Rewriting older SESSIONS.md entries that mention `about.astro` — rejected,
+  it is a dated append-only record; the rename is captured in CLAUDE.md and
+  ARCHITECTURE.md instead
+
+### Escalate
+- Nav tagline "WHERE TASTE & ART BLENDS" — still live, still unresolved.
+  Flagged 3rd time this project. Needs RJ/KD decision before further work
+  builds around it.
+
+### Next Session Candidates
+- Resolve nav tagline copy
+- Confirm `/about` redirect behavior once real adapter/SSR is in place
+  (Phase 5) — meta-refresh is a known interim gap
+- If a sitemap integration is ever added, the `/about` stub needs `noindex`
+  handling in it (the stub already emits the tag itself)
+
+---
+
 ## Session: 2026-08-19 — Footer redesign: three-column layout, 25%+ height cut, contrast-verified
 
 ### Completed

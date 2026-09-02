@@ -39,7 +39,7 @@ const navLinks = [
   { label: 'Home', href: '/' },
   { label: 'Collections', href: '/collections' },
   { label: 'Works', href: '/works' },
-  { label: 'About', href: '/about' },
+  { label: 'Artist', href: '/artist' },
   { label: 'Contact', href: '/contact' },
 ];
 
@@ -502,7 +502,7 @@ const copyrightYear = new Date().getFullYear();
   /* --logo-h no longer sizes anything visible — the wordmark is 22px of type —
      but it still sets the nav's height, so it stays. Nav height is a budget,
      not a free choice: every other page hardcodes a top offset to clear this
-     fixed bar (140px on /works and /collections, 150px /about, 160px /contact,
+     fixed bar (140px on /works and /collections, 150px /artist, 160px /contact,
      120px mobile), and it is published as --nav-h in tokens.css for everything
      that offsets against it. At 64 + 2×18 the bar is 100px. Letting the bar
      collapse to the height of the type would leave every one of those offsets

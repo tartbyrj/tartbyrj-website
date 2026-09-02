@@ -70,7 +70,11 @@ Plan:        Free
   links, so routes and neighbour data can't drift apart.
 - `ABOUT_QUERY` — aboutPage singleton. **Always returns `null`** — `aboutPage`
   isn't a registered schema (see ARCHITECTURE.md §5), so no such document can
-  exist in Studio yet. The About page runs on hardcoded local content instead.
+  exist in Studio yet. The Artist page runs on hardcoded local content instead.
+  Name kept as ABOUT_QUERY deliberately: it is named for the Sanity document
+  type it queries (`aboutPage`), not for the route that consumes it, and the
+  schema type has not been renamed. Renaming the route to /artist does not
+  rename the query.
 
 ---
 
@@ -96,7 +100,16 @@ src/
                                     rows, no work-thumbnail preview — see
                                     ARCHITECTURE.md §21)
     collections/[slug].astro    ← collection detail (storyPages + artworks)
-    about.astro
+    artist.astro                ← the Artist page, at /artist. Was about.astro
+                                    at /about until 2026-09-02; nav label is
+                                    "Artist". Sanity query is still
+                                    ABOUT_QUERY (named for the document type,
+                                    not the route)
+    about.astro                 ← redirect stub only, no markup —
+                                    Astro.redirect('/artist', 301). Kept so
+                                    live inbound links and bookmarks to /about
+                                    don't 404. Static build, so this emits a
+                                    meta-refresh page, not a real 3xx
     contact.astro               ← form is v2 placeholder; IG link now reads
                                     from lib/site.ts, not hardcoded
     studio/                     ← Sanity Studio (via @sanity/astro)
@@ -296,9 +309,9 @@ Phase 3 is **done** — the site is live and rebuilds automatically:
 - Contact/inquiry form — Formspree (placeholder at /contact)
 - Painting purchase — Stripe + Snipcart
 - Lesson booking — Calendly embed
-- About page — `aboutPage` schema doesn't exist in Studio yet, not just
-  unpublished; see ARCHITECTURE.md §5. Page currently runs on hardcoded
-  content in `about.astro`, not Sanity
+- Artist page (`/artist`) — `aboutPage` schema doesn't exist in Studio yet, not
+  just unpublished; see ARCHITECTURE.md §5. Page currently runs on hardcoded
+  content in `artist.astro`, not Sanity
 - Upcoming Exhibitions — homepage section 5 + dedicated `/exhibitions` page
   (ARCHITECTURE.md §17); `exhibition` schema not yet registered either
 - Analytics — Cloudflare Web Analytics snippet in Layout.astro

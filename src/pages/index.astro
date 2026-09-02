@@ -79,7 +79,7 @@ function heroFocusFrom(image: NonNullable<Artwork['image']>): string {
 const heroFocus = heroImage ? heroFocusFrom(heroImage) : '50% 50%';
 
 // Static gallery backdrop behind the scroll-expanding plate — always present,
-// not swapped via Sanity like heroUrl above. Same reasoning as about.astro's
+// not swapped via Sanity like heroUrl above. Same reasoning as artist.astro's
 // --backdrop: routed through getImage() rather than referenced from CSS by
 // path, so the raw local PNG doesn't ship as-is; this hands back a hashed
 // WebP to interpolate into the custom property below.
@@ -439,7 +439,7 @@ const tiles = recentWorks.map((artwork, i) => {
       Through murals, drawing and public art, Rupjyoti Baruah explores the stories carried by
       people, places and living beings.
     </p>
-    <a class="collection-link" href="/about">Read more →</a>
+    <a class="collection-link" href="/artist">Read more →</a>
   </section>
 </Layout>
 
