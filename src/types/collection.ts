@@ -39,6 +39,16 @@ export const CollectionSchema = z.object({
       z
         .object({
           asset: z.object({ _ref: z.string() }),
+          // Studio has hotspot: true on this image type (see
+          // src/sanity/schemas/collection.ts) — undeclared here, Zod strips
+          // it on parse and any future crop of these plates silently loses
+          // editor-set focus. Same shape as coverImage/artworks[].image above.
+          hotspot: z
+            .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
+            .nullish(),
+          crop: z
+            .object({ top: z.number(), bottom: z.number(), left: z.number(), right: z.number() })
+            .nullish(),
           // Author-supplied alt for the spread (schema field on the image
           // object itself, so the bare `storyPages` projection in
           // COLLECTION_BY_SLUG_QUERY already returns it — no GROQ change).
