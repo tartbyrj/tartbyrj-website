@@ -449,6 +449,26 @@ accessible name, and screen readers announce the title twice.
 Descriptive `altText` is still required wherever an image stands alone without an
 adjacent text label — for example the cover hero on `/collections/[slug]`.
 
+**Deck story pages (`collection.storyPages[]`) are the extreme case of this
+rule, not an exception to it.** Each page is a full exported spread with its
+own title, standfirst, body paragraphs, artwork caption and often a pull
+quote — text baked into the image's pixels, not markup. Since 2026-09-02 each
+page carries its own `alt` field (named `alt`, not `altText` — see the naming
+note in CLAUDE.md's Zod schema section) whose Sanity description asks the
+author to transcribe the whole spread, not caption it. An equivalent alt for
+one of these commonly runs 400–550 characters; that's correct, not bloated —
+a screen reader user needs the words the spread actually contains, not a
+summary of them. **That length is also why it must never be echoed into a
+container control's own accessible name** (the plate thumbnail button that
+opens the lightbox): the button's `aria-label` stays a short position label,
+and the transcription lives only on the lightbox `<img alt>`, set at the
+moment that specific page is shown. As of that date, 13 of 15 pages on the
+one collection with a published deck have no alt text yet — not a bug, a
+content backlog; the field renders as empty alt (decorative) rather than a
+generated placeholder like "page 3 of 15," because a generated positional
+string would just repeat what the dialog's own title and page counter
+already announce, while still describing nothing real.
+
 ---
 
 ## 9. Animation Principles
