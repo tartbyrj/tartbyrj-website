@@ -74,6 +74,51 @@ export default defineType({
           options: {
             hotspot: true,
           },
+          fields: [
+            // Deck pages are Canva spreads with their text baked into the
+            // pixels, so the image IS the text — WCAG 1.1.1 and 1.4.5 both
+            // apply and neither the page number nor the collection title is a
+            // substitute for what the spread actually says. Nothing but the
+            // author can supply this: it cannot be derived from the asset.
+            //
+            // Not required(): making it mandatory would block publishing on
+            // every existing collection until all pages are back-filled, and
+            // the render degrades safely without it (see the alt handling in
+            // collections/[slug].astro).
+            // `text`, not `string`: these spreads carry a title, a standfirst,
+            // several body paragraphs, an artwork caption with medium and
+            // dimensions, and a pull quote. An equivalent alternative runs to
+            // a paragraph or more, and Studio renders `string` as a
+            // single-line input that makes writing (and re-reading) one
+            // impractical. `rows` only sets the initial height of the
+            // textarea; it does not cap length.
+            //
+            // Type change only — both are plain strings in the dataset, so the
+            // two alts already authored carry over untouched and the Zod type
+            // (z.string().nullish()) is unaffected.
+            //
+            // Named `alt`, not `altText` like the equivalent field on
+            // artwork.ts — a real inconsistency, left as-is deliberately.
+            // Renaming it is a Sanity field-name change, not just a code
+            // edit: two collection documents already have real alt text
+            // authored under the key `alt` in the live production dataset
+            // (see SESSIONS.md 2026-09-02). Renaming the schema field without
+            // a dataset migration to move those values to the new key would
+            // make Studio show them as empty — the content isn't gone, but it
+            // would read as if it were, to whoever opens Studio next. Fix
+            // this by running a proper migration (`sanity documents query` +
+            // patch, or the Sanity migration CLI) that copies `storyPages[].alt`
+            // to `storyPages[].altText` across the dataset, then rename here —
+            // don't just rename the field name below.
+            defineField({
+              name: 'alt',
+              title: 'Alt text',
+              type: 'text',
+              rows: 4,
+              description:
+                'What this page says and shows, for someone who cannot see it. Transcribe the spread’s own words — title, standfirst, body, artwork title, medium, size, year, pull quote — then describe the artwork itself. Not "page 3", and not one word.',
+            }),
+          ],
         },
       ],
     }),

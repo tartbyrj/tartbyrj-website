@@ -1,67 +1,59 @@
-# Artist portrait — optional override
+# Artist portrait
 
-The About page already ships with a portrait: `src/assets/about/artist-cutout.png`,
-the artist standing free on the background art. **You do not need to add
-anything here.** This folder is only for swapping that photo for a different
-one without going through Sanity.
+## What ships
 
-To do that, drop a file here named **`me`** — the extension can be `.jpg`,
-`.jpeg`, `.png`, or `.webp`:
+`rupjyoti-portrait.jpeg` — the studio photograph the Artist page renders by
+default. A whole photograph with its own background (1023 × 1537), shown in a
+framed box: a thin `--border-strong` rule, `object-fit: contain`, and an
+`aspect-ratio` locked to the file's own 1023 / 1537 so the full frame is always
+visible and nothing is ever cropped.
+
+**If you replace this file, update the `aspect-ratio` pair in `artist.astro`'s
+`.portrait :global(img)` rule to match the new file's dimensions.** `contain`
+means a mismatch shows as letterbox bars rather than a silent crop — visible,
+but still wrong.
+
+## Optional override
+
+You do not need to add anything here. This folder also accepts a file named
+**`me`** — extension `.jpg`, `.jpeg`, `.png`, or `.webp`:
 
 ```
 src/assets/artist/me.jpg
 ```
 
-The About page picks it up on the next `npm run dev` or `npm run build`.
+The Artist page picks it up on the next `npm run dev` or `npm run build`.
 Nothing to import, nothing to rename in code. Delete it and the page goes back
-to the shipped cutout.
+to `rupjyoti-portrait.jpeg`.
 
 ## Which photo works best
 
-A photo dropped here is shown **framed** — a 4:5 portrait crop with a thin
-border, sitting on the background art. It is not stood free on the collage the
-way the shipped cutout is, because an ordinary photo brings its own background
-with it, and a bare rectangle of someone's living room floating on the artwork
-reads as a mistake rather than a choice.
+All portrait sources now get the same framed treatment, so:
 
-So:
-
-- **A 4:5-ish portrait crop.** Head-and-shoulders or waist-up both work.
+- **A tall portrait crop**, roughly 2:3. The box is locked to
+  `rupjyoti-portrait.jpeg`'s ratio, and `contain` letterboxes anything that
+  doesn't match rather than cropping it — so either match the ratio or update
+  the CSS as noted above.
 - **At least 1200px wide**, ideally 1800px. Drop the full-resolution file — it
   is resized at build time and the original is never shipped.
-- `object-fit: cover` crops to fill, so leave a little margin on every edge
-  rather than framing tight.
-
-If you want the free-standing, no-frame treatment instead, the photo has to be
-a real cutout — see "Replacing the cutout" below.
+- Nothing is cropped, so frame the shot the way you want it seen.
 
 ## Where the portrait comes from
 
-The About page checks three sources, in order:
+The Artist page checks three sources, in order:
 
 1. **Sanity** — the `aboutPage` singleton's `portrait` field. Once published it
    wins, and the artist can change the photo without touching the repo. This is
-   the one to use in production. Framed, same as (2).
-2. **This folder** — `me.<ext>`, the local override. Framed.
-3. **`src/assets/about/artist-cutout.png`** — the shipped default, and the only
-   one shown free-standing.
+   the one to use in production.
+2. **This folder** — `me.<ext>`, the local override.
+3. **`rupjyoti-portrait.jpeg`** — the shipped default.
 
-## Replacing the cutout
-
-`artist-cutout.png` is generated, not hand-made. The source the artist supplied,
-`src/assets/about/artist.png`, looks like a cutout but isn't — it was exported
-with the editor's transparency checkerboard flattened into the pixels, so it is
-fully opaque and the "empty" area is grey squares. `scripts/key-artist-cutout.mjs`
-keys those out and crops to the subject:
-
-```bash
-node scripts/key-artist-cutout.mjs
-```
-
-Re-run it after replacing `artist.png`. If you can export a **genuinely**
-transparent PNG from the original editor, that will always beat the keyed
-version at the edges — replace `artist-cutout.png` with it directly and skip the
-script.
+All three render identically. The earlier cutout/framed split is gone: it
+existed only because the previous default (`src/assets/about/artist-cutout.png`)
+was keyed to transparency and stood free on the background art, which an
+ordinary photograph with its own background cannot do without reading as a
+mistake. That asset and `scripts/key-artist-cutout.mjs` still exist but are no
+longer wired to anything — see `src/assets/about/README.md`.
 
 ## Why this folder and not `public/`
 

@@ -1,4 +1,5 @@
 ---
+import { getImage } from 'astro:assets';
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { parseList } from '../lib/sanity/parse';
@@ -12,6 +13,7 @@ import {
 import { ArtworkSchema, type Artwork } from '../types/artwork';
 import { CollectionSchema, type Collection } from '../types/collection';
 import { HomepageSchema } from '../types/homepage';
+import heroBackdropSource from '../assets/hero/Hero-BG.png';
 
 const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
 const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORKS_QUERY');
@@ -50,6 +52,50 @@ const heroImage = hero?.image;
 const heroUrl = heroImage ? urlFor(heroImage).width(1920).format('webp').url() : undefined;
 const heroAlt = hero?.altText ?? hero?.title ?? '';
 const heroPlate = hero ? [hero.title, hero.medium, hero.year].filter(Boolean).join(' · ') : '';
+
+// object-position for .hero-media, driven by the artwork's Sanity hotspot —
+// same field, same math as workGeometry()'s `focus` below (pct() is a
+// function declaration, hoisted, callable up here despite being defined
+// later in this file). Wasn't wired up before now: .hero-media has always
+// defaulted to dead-center object-position, which is fine at small --p (the
+// plate is close to the artwork's own aspect ratio) but crops out the top of
+// a portrait painting once the frame goes full-bleed landscape at --p:1.
+// Fallback matches workGeometry's own — '50% 50%' — deliberately, not a
+// hero-specific guess: until a hotspot is set on the hero artwork in Studio,
+// this renders identically to today. Set the hotspot on "Fractured Vision"
+// (or whichever artwork is hero at the time) to fix the full-bleed crop.
+function heroFocusFrom(image: NonNullable<Artwork['image']>): string {
+  const hotspot = image.hotspot;
+  const crop = image.crop;
+  const left = crop?.left ?? 0;
+  const top = crop?.top ?? 0;
+  const keptW = 1 - left - (crop?.right ?? 0);
+  const keptH = 1 - top - (crop?.bottom ?? 0);
+  const usable = keptW > 0 && keptH > 0;
+  return hotspot && usable
+    ? `${pct((hotspot.x - left) / keptW)} ${pct((hotspot.y - top) / keptH)}`
+    : '50% 50%';
+}
+const heroFocus = heroImage ? heroFocusFrom(heroImage) : '50% 50%';
+
+// Static gallery backdrop behind the scroll-expanding plate — always present,
+// not swapped via Sanity like heroUrl above. Same reasoning as artist.astro's
+// --backdrop: routed through getImage() rather than referenced from CSS by
+// path, so the raw local PNG doesn't ship as-is; this hands back a hashed
+// WebP to interpolate into the custom property below.
+// width: 1366 is the source file's own width (Hero-BG.png is 1366×768) — not
+// a deliberate crop target. Do not raise it without a higher-res source;
+// Sharp will upscale past the source rather than error, which would ship a
+// softened image at a bigger byte cost for zero real detail. On viewports
+// wider than 1366px this still stretches via background-size: cover, same
+// as it would with any width value <= source — that softness is a source-
+// asset ceiling, not something fixable in this file.
+const heroBackdrop = await getImage({
+  src: heroBackdropSource,
+  format: 'webp',
+  quality: 78,
+  width: 1366,
+});
 
 // Each collection gets exactly one <img>; the browser picks the width from
 // srcset rather than the markup shipping a copy per breakpoint.
@@ -206,7 +252,11 @@ const tiles = recentWorks.map((artwork, i) => {
 ---
 
 <Layout title="Home" navMode="glass">
-  <section class="hero-track" id="hero-track">
+  <section
+    class="hero-track"
+    id="hero-track"
+    style={`--hero-bg:url('${heroBackdrop.src}')`}
+  >
     <div class="hero">
       <div class="hero-frame">
         {heroUrl ? (
@@ -216,6 +266,7 @@ const tiles = recentWorks.map((artwork, i) => {
             alt={heroAlt}
             loading="eager"
             fetchpriority="high"
+            style={`--focus:${heroFocus}`}
           />
         ) : (
           <div class="hero-media hero-media-fallback"></div>
@@ -388,7 +439,7 @@ const tiles = recentWorks.map((artwork, i) => {
       Through murals, drawing and public art, Rupjyoti Baruah explores the stories carried by
       people, places and living beings.
     </p>
-    <a class="collection-link" href="/about">Read more →</a>
+    <a class="collection-link" href="/artist">Read more →</a>
   </section>
 </Layout>
 
@@ -534,6 +585,17 @@ const tiles = recentWorks.map((artwork, i) => {
     height: 100vh;
     width: 100%;
     overflow: hidden;
+    /* Gallery backdrop, added behind the plate. Purely additive: .hero-frame,
+       .hero-media, .hero-overlay and the --p scroll script are untouched, so
+       the plate-opening animation keeps its exact existing behaviour — this
+       is just what's visible around and through it while --p < 1.
+       background-position is a starting point (the empty frame in the source
+       photo sits left-of-centre, slightly above the vertical middle) — nudge
+       it once this is checked against the real breakpoints. */
+    background-image: var(--hero-bg);
+    background-size: cover;
+    background-position: 50% 40%;
+    background-repeat: no-repeat;
   }
 
   .hero-track.is-animated .hero {
@@ -569,6 +631,9 @@ const tiles = recentWorks.map((artwork, i) => {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    /* --focus written per-image in the markup — see heroFocusFrom() in the
+       frontmatter. Same var/pattern as .rw-shot img's --focus below. */
+    object-position: var(--focus, 50% 50%);
   }
 
   .hero-media-fallback {

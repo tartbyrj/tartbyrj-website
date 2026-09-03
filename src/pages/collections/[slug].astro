@@ -137,6 +137,16 @@ const lightboxUrls = storyPages.map((page) =>
   urlFor(page).width(LIGHTBOX_W).fit('max').format('webp').quality(88).url()
 );
 
+// Author-supplied alt per spread, parallel to the URL arrays above. Empty
+// string, not a positional fallback like "Page 03 of 12": the dialog is
+// already labelled with the collection title and the counter is aria-live,
+// so a generated positional string would announce a third copy of what a
+// screen reader has just been told twice and still say nothing about the
+// spread. Empty alt keeps the image decorative until someone writes the one
+// thing that would actually help — which only the author can (see the field
+// description on storyPages in src/sanity/schemas/collection.ts).
+const pageAlts = storyPages.map((page) => page.alt?.trim() || '');
+
 const statement = collection.description?.trim() || null;
 const tagline = collection.tagline?.trim() || null;
 
@@ -223,6 +233,17 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       <>
         <section class="deck-plates">
           {plateUrls.map((src, i) => (
+            // Deliberately NOT appending pageAlts[i] to aria-label below. The
+            // alt field's own Sanity description asks authors to transcribe
+            // the whole spread — title, standfirst, body, caption, pull quote
+            // — which can run past 500 characters (see the two already
+            // written for this collection). That's the right length for the
+            // lightbox <img alt>, read once the visitor has chosen to open
+            // the page; appended here it would be the accessible NAME of a
+            // thumbnail button in a grid, announced in full on focus before
+            // the dialog even opens, once per page, ahead of every other
+            // control on the section. The position is enough to choose a
+            // page from; the content is what the lightbox is for.
             <button
               type="button"
               class="plate"
@@ -321,8 +342,11 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       class="lightbox"
       aria-label={`${collection.title} — deck pages`}
       data-pages={JSON.stringify(lightboxUrls)}
+      data-alts={JSON.stringify(pageAlts)}
     >
       <div class="lightbox-stage">
+        {/* alt is set per page by show() below, from data-alts. It starts
+            empty because no page is loaded until the deck is opened. */}
         <img class="lightbox-img" alt="" decoding="async" />
       </div>
       <p class="lightbox-counter" aria-live="polite"></p>
@@ -543,7 +567,13 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
     color: var(--text-primary);
     background: var(--bg-secondary);
     border: 1px solid var(--border-strong);
-    border-radius: 2px;
+    /* Was 2px — off DESIGN.md's shape scale (0 / 6px / 999px; the gallery
+       mat's 6px is the one named exception, and this isn't that). This sits
+       in normal document flow as the mobile path into the deck, in place of
+       the plate grid it replaces at that width — content commitment, not a
+       floating utility control — so it takes the sharp register (0), same as
+       every other CTA and panel on the site, not the pill register. */
+    border-radius: 0;
     cursor: pointer;
   }
 
@@ -842,6 +872,17 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       pages = [];
     }
 
+    // Parallel to `pages`. Parsed separately and defaulted to [] on failure so
+    // a malformed alts payload degrades to empty alt rather than taking the
+    // whole deck down with it — the images are the point, the alt is the
+    // enhancement.
+    let alts: string[] = [];
+    try {
+      alts = JSON.parse(dialog.dataset.alts ?? '[]');
+    } catch {
+      alts = [];
+    }
+
     if (img && counter && pages.length > 0) {
       const pad = (n: number) => String(n).padStart(2, '0');
       let index = 0;
@@ -855,6 +896,9 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       function show(next: number) {
         index = (next + pages.length) % pages.length;
         img!.src = pages[index];
+        // Reassigned every page, not just when an alt exists — otherwise page
+        // 2's alt would stay announced while page 3's image is on screen.
+        img!.alt = alts[index] ?? '';
         counter!.textContent = `${pad(index + 1)} / ${pad(pages.length)}`;
       }
 

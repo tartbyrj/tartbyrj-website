@@ -48,7 +48,7 @@ Plan:        Free
 | File | Type | Key fields |
 |---|---|---|
 | `artwork.ts` | document | title, slug, image (hotspot), year, medium, dimensions, available, price, collection (ref), featured, altText |
-| `collection.ts` | document | title, tagline, slug, year, location, description ("Statement" — short pull quote transcribed from the deck, not a prose paragraph), coverImage, storyPages[], artworks[] (refs), seo |
+| `collection.ts` | document | title, tagline, slug, year, location, description ("Statement" — short pull quote transcribed from the deck, not a prose paragraph), coverImage, storyPages[] (each image also carries an `alt` field — a full transcription of that spread, not a caption; see Zod schema notes below), artworks[] (refs), seo |
 | `index.ts` | — | exports schemaTypes = [artwork, collection] |
 
 ### GROQ Queries (src/lib/sanity/queries.ts)
@@ -70,7 +70,11 @@ Plan:        Free
   links, so routes and neighbour data can't drift apart.
 - `ABOUT_QUERY` — aboutPage singleton. **Always returns `null`** — `aboutPage`
   isn't a registered schema (see ARCHITECTURE.md §5), so no such document can
-  exist in Studio yet. The About page runs on hardcoded local content instead.
+  exist in Studio yet. The Artist page runs on hardcoded local content instead.
+  Name kept as ABOUT_QUERY deliberately: it is named for the Sanity document
+  type it queries (`aboutPage`), not for the route that consumes it, and the
+  schema type has not been renamed. Renaming the route to /artist does not
+  rename the query.
 
 ---
 
@@ -96,7 +100,16 @@ src/
                                     rows, no work-thumbnail preview — see
                                     ARCHITECTURE.md §21)
     collections/[slug].astro    ← collection detail (storyPages + artworks)
-    about.astro
+    artist.astro                ← the Artist page, at /artist. Was about.astro
+                                    at /about until 2026-09-02; nav label is
+                                    "Artist". Sanity query is still
+                                    ABOUT_QUERY (named for the document type,
+                                    not the route)
+    about.astro                 ← redirect stub only, no markup —
+                                    Astro.redirect('/artist', 301). Kept so
+                                    live inbound links and bookmarks to /about
+                                    don't 404. Static build, so this emits a
+                                    meta-refresh page, not a real 3xx
     contact.astro               ← form is v2 placeholder; IG link now reads
                                     from lib/site.ts, not hardcoded
     studio/                     ← Sanity Studio (via @sanity/astro)
@@ -105,6 +118,18 @@ scripts/footer-contrast.mjs     ← 16×16px window sweep over the rendered
                                     footer plate — re-run before touching
                                     footer colors, height, or the texture
                                     breakpoint. See ARCHITECTURE.md §18.
+scripts/surface-contrast.mjs    ← same 16×16px method, generalised to any
+                                    photographic text surface (currently the
+                                    /artist intro backdrop) via a real
+                                    screenshot instead of re-rendering the
+                                    background stack. Sibling to
+                                    footer-contrast.mjs, not a replacement —
+                                    read its own header before running it;
+                                    it documents two measurement traps
+                                    (Astro dev toolbar sampled as background,
+                                    `.reveal.visible` overriding
+                                    `visibility:hidden`) that produced false
+                                    numbers the first time each was hit.
 sanity.config.ts                ← Sanity Studio config
 ARCHITECTURE.md                 ← full project spec (source of truth)
 SESSIONS.md                     ← session log (read last 2 entries on start)
@@ -211,6 +236,7 @@ const data = parsed.data
 - **Every optional field is `.nullish()`, never `.optional()`** — GROQ returns `null` (not `undefined`) for anything unset in Studio, and `.optional()` rejects `null`, which makes `parseList` drop the whole document. Instances: `artwork.collection` (also shaped to accept both the dereferenced `{title,slug}` and the raw `{_ref}`), and `image.hotspot` / `image.crop` on `artwork.image` and `collection.coverImage`.
 - `collection.artworkCount`: `z.number().nullish()` — computed field from GROQ, would be stripped otherwise. `.nullish()`, not `.optional()`, per the rule above: `count()` returns `null` (not undefined) for a collection whose `artworks` array was never set.
 - `collection.artworks[].image`: `.nullish().catch(null)`. The `.catch()` is required, not stylistic — this field is validated by a single `safeParse` on one document (`collections/[slug].astro`), *not* by `parseList`, so there is no per-item damage containment above it. Without the catch, one image object missing `asset` fails the item → the array → the whole collection → and the detail page redirects away. The catch degrades it to a missing thumbnail instead.
+- `collection.storyPages[].alt`: `z.string().nullish()` — every deck page authored before 2026-09-02 predates this field, so it's `null` on almost all of them today, not an edge case to guard against "just in case." Field is named `alt` on this schema, `altText` on `artwork.ts` — a known, deliberate naming inconsistency, not fixed because two collection documents already have real content under the `alt` key in production Sanity and renaming without a migration would make that content look empty in Studio. See the comment on this field in `src/sanity/schemas/collection.ts` before touching either name.
 
 ### Image URLs
 ```typescript
@@ -232,11 +258,37 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 ### CSS rules
 - Zero hardcoded hex values in components — always `var(--token-name)`
 - If you add a color not in tokens.css, add it there first
+- **Exception:** a color-with-alpha value used in exactly one place, with no
+  reuse case, can live as a custom property in that page's own `<style>`
+  block instead — `--scrim` and `--intro-muted` in `artist.astro` are the
+  precedent. The tokens.css rule exists to stop hex/rgba scattering across
+  components with no single source of truth; a value that already has one
+  source (the one page that uses it) isn't what the rule is protecting
+  against. Don't reach for this for anything with a plausible second
+  consumer — that goes in tokens.css.
 - `.reveal` + `.reveal.visible` classes defined in global.css — use them for all scroll animations
 - `text-transform: uppercase` on labels/eyebrows is intentional — do not remove from `.nav-links a`, `.footer-links a`, `.hero-eyebrow`, `.sec-label`
 - `.ci-eyebrow` and `.works-eyebrow` share font-size/letter-spacing (11px,
   0.22em) intentionally — any future eyebrow component should match this,
   not invent a third value
+- Animate hover/interaction state on `transform`, never on `width`/`height`
+  directly — the latter forces a layout recalculation on every frame of the
+  transition, the former is compositor-only. `Layout.astro`'s `.cursor` /
+  `.cursor-ring` are the reference: they used to grow/shrink via `width`/
+  `height` and now do it via `transform: scale()` against a fixed box size.
+  Watch for the one real gotcha this surfaced: `transform: scale()` also
+  magnifies a `border`, so an element with a stroke needs a compensating
+  `border-width` on the scaled state (see `.cursor-ring.cursor-hover`) — and
+  that compensation is approximate, not exact, because browsers snap
+  hairline border-widths to the nearest device pixel before any transform
+  runs.
+- A thin inline-link CTA that must clear a touch-target floor without
+  growing its visible underline gets an invisible `::before` hit-area
+  expansion (`position: absolute`, sized to the target, `pointer-events`
+  inherited), not padding — padding either grows the visible box or pushes
+  the underline away from the text. `.available-cta` in `artist.astro` is
+  the reference implementation; verify with `elementFromPoint` at offsets
+  from the visible box's center, not just by reading the CSS.
 
 ### Scroll reveal
 ```html
@@ -258,6 +310,8 @@ urlFor(image).width(1200).format('webp').quality(85).url()
 - Never defer the theme init script — must be inline in `<head>`
 - Never render the same Sanity image twice in markup to serve different breakpoints — reposition one `<img>` with CSS instead
 - Never derive collection-detail layout from the position or content of a storyPages array element — Sanity fields (title, tagline, location, year) drive the cover; storyPages is presentation-neutral content RJ can reorder freely. See ARCHITECTURE.md section 20.
+- Never `transition: width, height` (or animate them any other way) on a hover/interaction state — use `transform: scale()` against a fixed box instead. See the CSS rules entry above for the border-width caveat this creates.
+- Never put an image's full accessible description into a link/button's `aria-label` when that image also has its own `alt` read separately (e.g. a lightbox trigger) — the long text belongs on the thing it describes, not on every control that can reach it. `collections/[slug].astro`'s deck-plate buttons hit this: `aria-label` stays a short position label ("View page 3 of 15 full screen"), the full transcription lives only on the lightbox `<img alt>`.
 
 ---
 
@@ -267,8 +321,8 @@ Pages:        static routes in src/pages/ plus dynamic paths from Sanity content
               (run `npm run build` output for current count)
 Deployed:     tartbyrj.pages.dev (Cloudflare Pages, auto-deploy from main)
 Sanity:       webhook → Cloudflare deploy hook, live
-TS errors:    0 (confirmed 2026-08-18 after collection-detail resilience
-              pass — see SESSIONS.md same date)
+TS errors:    0 (confirmed 2026-09-02 after the /artist audit fix queue +
+              code-review round — see SESSIONS.md same date)
 Not verified: 700px breakpoint boundary pixel-exact (works-head/gallery
               rail split)
 Build:        clean (page count varies with live Sanity content — see
@@ -277,7 +331,10 @@ Build:        clean (page count varies with live Sanity content — see
               Studio. 2026-08-19: 31 at build time, was 36 earlier the same
               session — confirmed this is Sanity-content-driven, not a
               route regression: rebuilding a pre-session commit against
-              today's live dataset also returns 31)
+              today's live dataset also returns 31. 2026-09-02: 32 — a real,
+              permanent +1 from the `/about` redirect stub added that
+              session, not content drift; don't read a jump back down to 31
+              as a route regression either)
 ```
 
 ---
@@ -296,9 +353,9 @@ Phase 3 is **done** — the site is live and rebuilds automatically:
 - Contact/inquiry form — Formspree (placeholder at /contact)
 - Painting purchase — Stripe + Snipcart
 - Lesson booking — Calendly embed
-- About page — `aboutPage` schema doesn't exist in Studio yet, not just
-  unpublished; see ARCHITECTURE.md §5. Page currently runs on hardcoded
-  content in `about.astro`, not Sanity
+- Artist page (`/artist`) — `aboutPage` schema doesn't exist in Studio yet, not
+  just unpublished; see ARCHITECTURE.md §5. Page currently runs on hardcoded
+  content in `artist.astro`, not Sanity
 - Upcoming Exhibitions — homepage section 5 + dedicated `/exhibitions` page
   (ARCHITECTURE.md §17); `exhibition` schema not yet registered either
 - Analytics — Cloudflare Web Analytics snippet in Layout.astro
