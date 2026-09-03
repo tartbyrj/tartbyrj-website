@@ -233,15 +233,22 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
       <>
         <section class="deck-plates">
           {plateUrls.map((src, i) => (
+            // Deliberately NOT appending pageAlts[i] to aria-label below. The
+            // alt field's own Sanity description asks authors to transcribe
+            // the whole spread — title, standfirst, body, caption, pull quote
+            // — which can run past 500 characters (see the two already
+            // written for this collection). That's the right length for the
+            // lightbox <img alt>, read once the visitor has chosen to open
+            // the page; appended here it would be the accessible NAME of a
+            // thumbnail button in a grid, announced in full on focus before
+            // the dialog even opens, once per page, ahead of every other
+            // control on the section. The position is enough to choose a
+            // page from; the content is what the lightbox is for.
             <button
               type="button"
               class="plate"
               data-lb-open={i}
-              aria-label={
-                pageAlts[i]
-                  ? `View page ${pad(i + 1)} of ${pad(totalPages)} full screen: ${pageAlts[i]}`
-                  : `View page ${pad(i + 1)} of ${pad(totalPages)} full screen`
-              }
+              aria-label={`View page ${pad(i + 1)} of ${pad(totalPages)} full screen`}
             >
               <img
                 class="plate-img"
@@ -560,7 +567,13 @@ const metaDescription = metaSource ? truncateAtWord(metaSource) : undefined;
     color: var(--text-primary);
     background: var(--bg-secondary);
     border: 1px solid var(--border-strong);
-    border-radius: 2px;
+    /* Was 2px — off DESIGN.md's shape scale (0 / 6px / 999px; the gallery
+       mat's 6px is the one named exception, and this isn't that). This sits
+       in normal document flow as the mobile path into the deck, in place of
+       the plate grid it replaces at that width — content commitment, not a
+       floating utility control — so it takes the sharp register (0), same as
+       every other CTA and panel on the site, not the pill register. */
+    border-radius: 0;
     cursor: pointer;
   }
 

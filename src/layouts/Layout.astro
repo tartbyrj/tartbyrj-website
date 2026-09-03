@@ -464,14 +464,23 @@ const copyrightYear = new Date().getFullYear();
     pointer-events: none;
     border-radius: 50%;
     z-index: 9999;
-    transform: translate(-50%, -50%);
+    /* translate(-50%, -50%) resolves against the element's own (unscaled)
+       border box before the rest of the transform list applies, so appending
+       scale() here doesn't disturb the centring — the box being centred never
+       changes size, only its paint does. */
+    transform: translate(-50%, -50%) scale(1);
+    /* Was width/height, both layout properties recalculated by the browser on
+       every animation frame of the transition — expensive on their own, and
+       doubly so here since the script below already repositions these same
+       elements via left/top on every mousemove. transform is compositor-only:
+       the size change now costs a repaint, not a layout pass. */
+    transition: transform var(--dur-base) var(--ease-out);
   }
 
   .cursor {
     width: 9px;
     height: 9px;
     background: var(--accent);
-    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out);
   }
 
   .cursor-ring {
@@ -479,17 +488,34 @@ const copyrightYear = new Date().getFullYear();
     height: 34px;
     border: 1px solid var(--accent);
     opacity: 0.5;
-    transition: width var(--dur-base) var(--ease-out), height var(--dur-base) var(--ease-out);
+    /* Overrides the shared rule's transition to add border-width alongside
+       transform — see .cursor-ring.cursor-hover below for why border-width
+       is animated at all here. */
+    transition: transform var(--dur-base) var(--ease-out), border-width var(--dur-base) var(--ease-out);
   }
 
+  /* Scale factors reproduce the old width/height hover sizes exactly —
+     5/9 and 50/34 — against boxes that now stay fixed at 9px and 34px. */
   .cursor.cursor-hover {
-    width: 5px;
-    height: 5px;
+    transform: translate(-50%, -50%) scale(0.5556);
   }
 
   .cursor-ring.cursor-hover {
-    width: 50px;
-    height: 50px;
+    transform: translate(-50%, -50%) scale(1.4706);
+    /* transform scales the whole rendered box, border stroke included — at
+       1.4706× a declared 1px border paints at ~1.47px. 0.68px (= 1 ÷ 1.4706,
+       exactly 17/25) is the width that scales back toward 1px on hover,
+       instead of thickening. Not exact: browsers snap a hairline border-width
+       to the nearest device-pixel-aligned value before any transform is
+       applied — at dpr 2 this measures back as computed 0.5px, not 0.68px —
+       so the restored stroke is close to 1px, not laser-precise, and the
+       precise result varies by device pixel ratio. Good enough here: this is
+       a decorative, opacity:0.5 ring, not a hard edge anything depends on,
+       and chasing exact parity across every dpr would mean not scaling the
+       border at all (a separate non-scaled pseudo-element for the stroke) —
+       real complexity this element doesn't earn. .cursor has no border, so it
+       doesn't need any of this. */
+    border-width: 0.68px;
   }
 
   @media (hover: none) {

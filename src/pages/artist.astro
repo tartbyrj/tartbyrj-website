@@ -13,7 +13,32 @@ const AboutSchema = z.object({
   portrait: z.object({ asset: z.object({ _ref: z.string() }) }).nullish(),
 });
 
-const raw = await client.fetch(ABOUT_QUERY).catch(() => null);
+// ─── BACKDROP ──────────────────────────────────────────────────────────────
+// The page's own background art, exported clean — paper, ink washes, the
+// skyline sketch, the taped T.ART card, the notebook and brushes, and nothing
+// else. No text and no figure baked in, which is what lets everything on this
+// page be real HTML over it instead of hidden behind opaque cards.
+//
+// Rendered through getImage() rather than referenced from CSS by path: a CSS
+// url() is a string Astro's image pipeline never sees, so the raw 6MB PNG
+// would ship as-is. This hands back an optimised, hashed WebP to interpolate
+// into the custom property below.
+//
+// Started here, before the Sanity fetch below, and awaited together with it —
+// getImage()'s only input is the static backdropSource import, with no
+// dependency on anything Sanity returns, so there's no reason to pay the
+// network round-trip and the Sharp re-encode back-to-back on every build.
+const backdropPromise = getImage({
+  src: backdropSource,
+  format: 'webp',
+  quality: 76,
+  width: 2560,
+});
+
+const [raw, backdrop] = await Promise.all([
+  client.fetch(ABOUT_QUERY).catch(() => null),
+  backdropPromise,
+]);
 const result = AboutSchema.safeParse(raw);
 const about = result.success ? result.data : undefined;
 
@@ -83,23 +108,8 @@ const localPortrait = Object.values(localPortraits)[0]?.default;
 const sanityPortraitUrl = about?.portrait
   ? urlFor(about.portrait).width(900).format('webp').quality(85).url()
   : undefined;
-
-// ─── BACKDROP ──────────────────────────────────────────────────────────────
-// The page's own background art, exported clean — paper, ink washes, the
-// skyline sketch, the taped T.ART card, the notebook and brushes, and nothing
-// else. No text and no figure baked in, which is what lets everything on this
-// page be real HTML over it instead of hidden behind opaque cards.
-//
-// Rendered through getImage() rather than referenced from CSS by path: a CSS
-// url() is a string Astro's image pipeline never sees, so the raw 6MB PNG
-// would ship as-is. This hands back an optimised, hashed WebP to interpolate
-// into the custom property below.
-const backdrop = await getImage({
-  src: backdropSource,
-  format: 'webp',
-  quality: 76,
-  width: 2560,
-});
+// backdrop itself is resolved above, alongside the Sanity fetch — see the
+// BACKDROP comment near the top of this file.
 ---
 
 <Layout
@@ -225,6 +235,26 @@ const backdrop = await getImage({
        this keeps that from depending on exactly where the crop falls at a
        given viewport size. */
     --scrim: rgb(250 247 244 / 0.42);
+    /* --text-muted (global token, tuned for flat --bg-primary) measures
+       4.40:1 here — under AA's 4.5 — on .location, the one place on this page
+       that uses it. Page-scoped override, not a global nudge: every other
+       selector on this backdrop already clears 4.5 by a wide margin (see
+       scripts/surface-contrast.mjs output, SESSIONS.md 2026-09-02), so
+       raising --text-muted itself would over-correct everywhere else it's
+       used on flat surfaces across the site. Declared here rather than in
+       tokens.css for the same reason --scrim just above is: a value this
+       page-specific, with no second consumer, is exactly what CLAUDE.md's
+       "add it to tokens.css first" rule is not aimed at — that rule exists to
+       stop hex/rgba literals scattering across components with no single
+       source of truth, and a value used in exactly one place already has
+       one, right here next to --scrim. (An earlier draft of this comment
+       cited tokens.css's --footer-text/--footer-muted as "the same pattern"
+       — wrong: those live in tokens.css because the footer is global chrome
+       with reuse across every page. This value has no such reuse case; the
+       real, applicable precedent is the file's own --scrim.) Re-verify with
+       surface-contrast.mjs if the backdrop image, --scrim, or this page's
+       font-sizes ever change. */
+    --intro-muted: rgba(26, 20, 18, 0.68);
   }
 
   /* ── 1. Intro ──────────────────────────────────────────────────────────
@@ -307,9 +337,9 @@ const backdrop = await getImage({
     /* Set by the script at the bottom of the page as the section scrolls —
        the parallax itself. Declared here only as the resting value, which is
        what stays in effect under prefers-reduced-motion, when the script
-       never touches this element at all. */
+       never touches this element at all. will-change is NOT declared here on
+       purpose — see the script's own comment on why it's set from JS instead. */
     transform: translateY(0%);
-    will-change: transform;
   }
 
   /* ── Portrait ─────────────────────────────────────────── */
@@ -452,7 +482,9 @@ const backdrop = await getImage({
   }
 
   .location {
-    color: var(--text-muted);
+    /* var(--intro-muted), not var(--text-muted) — see the token comment on
+       .artist above. This is the one selector on the page that needed it. */
+    color: var(--intro-muted);
     line-height: 1.9;
   }
 
@@ -538,21 +570,30 @@ const backdrop = await getImage({
   }
 
   /* The size is the point of this section — the same three lines that were a
-     footnote under the biography, read at display scale. Pushed a further
-     step past the original ceiling, with tracking gone slightly negative
-     rather than the usual positive letter-spacing of the smaller type on
-     this page — that's what keeps very large serif from reading as merely
-     "bigger body text" instead of a deliberate display size. */
+     footnote under the biography, read at display scale, with tracking gone
+     slightly negative rather than the usual positive letter-spacing of the
+     smaller type on this page — that's what keeps very large serif from
+     reading as merely "bigger body text" instead of a deliberate display
+     size. Capped at 80px, DESIGN.md's own Display ceiling (the hero name):
+     an earlier version of this rule read 88px, which made this list the
+     single largest text on the site — bigger than the hero it's describing
+     the artist under. That was this page's error, not the design system's;
+     settled by grepping every clamp() ceiling in the codebase (only this one
+     line exceeded 80px) rather than by eye. Do not push this past 80px again
+     without changing what DESIGN.md calls the site's largest text. */
   .available-item {
     font-family: var(--font-serif);
     font-weight: 300;
-    font-size: clamp(32px, 7.3vw, 88px);
+    font-size: clamp(32px, 6.6vw, 80px);
     line-height: 1.12;
     letter-spacing: -0.005em;
     color: var(--text-primary);
   }
 
   .available-cta {
+    /* Anchor for ::before below — the expanded hit area is positioned
+       relative to this box, not the page. */
+    position: relative;
     align-self: flex-start;
     margin-top: 44px;
     /* +2px, same reasoning as .available-label above — this class is unique
@@ -564,6 +605,26 @@ const backdrop = await getImage({
     border-bottom: 1px solid var(--accent-dim);
     padding-bottom: 4px;
     transition: border-color var(--dur-base) ease;
+  }
+
+  /* Rendered box measures 189×25px — the link's visible weight (a thin
+     underline, matching the gallery-label CTA voice used elsewhere on the
+     site) is deliberate and isn't the thing to change. The 44px floor DESIGN.md
+     states for touch targets is a hit-area requirement, not a visual one:
+     this pseudo-element enlarges only the clickable region, vertically
+     centred on the real box, with zero effect on layout or paint — the exact
+     pattern WCAG 2.2's own understanding doc for SC 2.5.8 describes for an
+     inline link that must stay visually thin. Width is 100% of the anchor's
+     own shrink-wrapped box, not the viewport: the link is already 189px wide,
+     comfortably past 44px, so only the height was short. */
+  .available-cta::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 44px;
+    transform: translateY(-50%);
   }
 
   .available-cta:hover {
@@ -583,6 +644,9 @@ const backdrop = await getImage({
      unguarded it compiles to a selector that can never match. */
   :global([data-theme='dark']) .artist {
     --scrim: rgb(8 7 6 / 0.88);
+    /* Dark's --text-muted measures 4.47:1 on .location — same gap as light,
+       same reasoning as the light override above. */
+    --intro-muted: rgba(240, 235, 227, 0.58);
   }
 
   /* The studio photo is lit bright against a pale taupe backdrop, so on the
@@ -692,6 +756,16 @@ const backdrop = await getImage({
     // number, if either RANGE or the CSS height/top pair ever moves again.
     const RANGE = 12;
     let queued = false;
+
+    // Promotes .backdrop to its own compositor layer for exactly as long as
+    // the parallax can actually touch it — CSS declared this statically
+    // before, which held the layer open for the page's entire lifetime,
+    // including under reduced-motion where this branch (and therefore the
+    // transform write in update() below) never runs at all. Set once here,
+    // not toggled off later: this page has no point where the parallax
+    // meaningfully "ends" while the section still exists, so there's no
+    // later moment to release it into that wouldn't just be guessing.
+    backdrop.style.willChange = 'transform';
 
     const update = () => {
       const rect = section.getBoundingClientRect();

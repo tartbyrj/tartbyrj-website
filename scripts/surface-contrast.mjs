@@ -18,6 +18,19 @@
  * committed rather than left in a scratchpad. Do not delete it when /artist
  * next looks fine.
  *
+ * DUPLICATION, ACKNOWLEDGED: luminance(), contrast(), over(), parseRgba() and
+ * windowMean() below are near-verbatim copies of the same functions in
+ * footer-contrast.mjs, not imports from a shared module — there is no
+ * scripts/lib/ for the two to share. Deliberately not extracted this session:
+ * footer-contrast.mjs is a working, independently-relied-on tool that
+ * predates this one, and refactoring it to share code is a real change to a
+ * file nothing here required touching, for a codebase that has exactly two
+ * consumers of this math. If either script's WCAG math, WINDOW/STRIDE/AA_*
+ * constants, or rgba parsing ever needs a fix, apply it to BOTH files and
+ * verify both — they will not warn you that they've drifted apart. Extracting
+ * a shared `scripts/lib/contrast.mjs` is the correct fix if a third surface
+ * ever needs this, or if the two are caught disagreeing.
+ *
  * ── HOW TO PRODUCE THE INPUTS ──────────────────────────────────────────────
  * Both come from the PRODUCTION BUILD (`npm run build && npm run preview`),
  * never the dev server: the Astro dev toolbar is a dark pill that floats over
@@ -120,12 +133,24 @@ function sweep(img, el, dpr) {
   const x1 = px(el.x) - pad, y1 = px(el.y) - pad;
   const x2 = px(el.x + el.w) + pad, y2 = px(el.y + el.h) + pad;
   let min = Infinity, at = null;
-  for (let y = y1; y <= y2 - WINDOW; y += STRIDE) {
-    for (let x = x1; x <= x2 - WINDOW; x += STRIDE) {
-      const bg = windowMean(img, x, y);
+  // Both loop conditions carry `|| y === y1` / `|| x === x1`, same as
+  // footer-contrast.mjs's sweep(): without it, a glyph box shorter or
+  // narrower than WINDOW (16px) after padding produces zero iterations, `min`
+  // never leaves Infinity, and the caller's `min >= threshold` check reports a
+  // false PASS for a selector that was never actually sampled. Coordinates are
+  // rounded at the point they're used to index the pixel buffer — `dpr` is
+  // read live from the browser and is not guaranteed to be an integer (125%
+  // OS display scaling, browser zoom), and windowMean() indexes a raw
+  // Uint8Array/Buffer, which silently returns undefined for a non-integer
+  // index rather than throwing; that propagates to NaN, which then never
+  // satisfies `c < min`, silently dropping every corrupted window and
+  // degenerating to the same Infinity-stays-PASS failure by a different path.
+  for (let y = y1; y <= y2 - WINDOW || y === y1; y += STRIDE) {
+    for (let x = x1; x <= x2 - WINDOW || x === x1; x += STRIDE) {
+      const bg = windowMean(img, Math.round(x), Math.round(y));
       if (!bg) continue;
       const c = contrast(over(rgb, bg, alpha), bg);
-      if (c < min) { min = c; at = [x, y]; }
+      if (c < min) { min = c; at = [Math.round(x), Math.round(y)]; }
     }
   }
   return { min, at };

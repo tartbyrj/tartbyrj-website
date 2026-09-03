@@ -96,6 +96,20 @@ export default defineType({
             // Type change only — both are plain strings in the dataset, so the
             // two alts already authored carry over untouched and the Zod type
             // (z.string().nullish()) is unaffected.
+            //
+            // Named `alt`, not `altText` like the equivalent field on
+            // artwork.ts — a real inconsistency, left as-is deliberately.
+            // Renaming it is a Sanity field-name change, not just a code
+            // edit: two collection documents already have real alt text
+            // authored under the key `alt` in the live production dataset
+            // (see SESSIONS.md 2026-09-02). Renaming the schema field without
+            // a dataset migration to move those values to the new key would
+            // make Studio show them as empty — the content isn't gone, but it
+            // would read as if it were, to whoever opens Studio next. Fix
+            // this by running a proper migration (`sanity documents query` +
+            // patch, or the Sanity migration CLI) that copies `storyPages[].alt`
+            // to `storyPages[].altText` across the dataset, then rename here —
+            // don't just rename the field name below.
             defineField({
               name: 'alt',
               title: 'Alt text',

@@ -8,9 +8,110 @@
 
 ## Session: 2026-09-02 (cont'd) — `/impeccable audit` of /artist, sitewide detector sweep, deck alt-text pipeline
 
-> **RESUMING? START HERE.** The fix queue below is the live to-do list. Items 1
-> and 1b are done and committed; 2–7 are not started. Everything needed to pick
-> up item 2 is in this entry.
+> **RESUMING? START HERE. FIX QUEUE IS COMPLETE (8/8) — then a `/code-review
+> high` pass on the diff found 8 more real issues in items 1, 2, and 5–8's own
+> code, 6 of which are now also fixed.** Six files uncommitted total — see
+> notes below for what's in each. DESIGN.md (item 8) is gitignored,
+> working-tree only, nothing to commit there. Two unrelated content findings
+> (placeholder alt text on the homepage, placeholder Statement text on a live
+> collection) are still flagged but not fixed — both need a Studio edit, not
+> code, see below.
+
+### Code review round — `/code-review high` on the uncommitted diff
+Run by the user against everything above, not by me. Found 8 issues; I
+verified each against the actual source before touching anything (per
+receiving-code-review — technical rigor, not blind implementation), then
+fixed 6, corrected one of my own inaccurate claims, and left one unfixed with
+its risk documented. All fixes re-passed `astro check` (0/0/0) and
+`npm run build` (clean, 32 pages).
+
+**Fixed:**
+- **Plate-button `aria-label` carried the full alt transcription.** Item 1's
+  own aria-label appended `pageAlts[i]` — up to 553 characters — to the
+  thumbnail button that OPENS the lightbox, not just to the lightbox `<img
+  alt>` where it belongs. A screen reader would announce the entire spread
+  transcription as that button's accessible name on focus, before the dialog
+  even opened, once per page in the grid. Fixed: the button's aria-label is
+  back to `View page N of M full screen`; `data-alts` and the lightbox
+  `img.alt` still carry the full text, verified separately in the built HTML
+  (`data-alts` lengths unchanged at 450/553; new aria-labels confirmed short).
+- **`surface-contrast.mjs` had a real correctness bug: small elements or
+  fractional `devicePixelRatio` produced a silent false PASS.** `sweep()`'s
+  loop had no iterations when a glyph box was shorter/narrower than the 16px
+  window even after padding, or when a fractional dpr made every sampled
+  coordinate non-integer (NaN from indexing a typed array at a non-integer
+  offset) — either way `min` stayed `Infinity`, and `Infinity >= 4.5` reports
+  PASS for a selector that was never actually measured. Ported the two
+  defensive patterns already proven correct in `footer-contrast.mjs`: `|| y
+  === y1` / `|| x === x1` loop fallbacks, and `Math.round()` at the point
+  coordinates are used to index pixels. Re-ran all four saved geometry/
+  screenshot pairs from item 2's verification through the fixed tool — **same
+  numbers as before** (dpr was 2, an integer, throughout this session, so the
+  bug never fired on anything already reported) — but the tool is now correct
+  for any future run at a fractional dpr or on a smaller selector.
+- **`.cursor-ring`'s border thickened on hover** — a real regression from
+  item 5, and my own "pixel-identical" claim for that fix was wrong.
+  `transform: scale(1.4706)` scales the entire painted box, border stroke
+  included, so the declared 1px border rendered at ~1.47px on hover. Added
+  `border-width: 0.68px` (`= 1 ÷ 1.4706`) to the hover state to scale back
+  toward 1px. **Not exact**: browsers snap hairline border-widths to the
+  nearest device-pixel-aligned value before any transform runs — measured
+  live at dpr 2, the declared 0.68px reads back as computed `0.5px`, not
+  0.68px — so the compensation is a real improvement, not perfect parity, and
+  the exact result is dpr-dependent. Judged not worth chasing further: this
+  is a decorative, `opacity: 0.5` ring, true pixel parity across every dpr
+  would require not scaling the border at all (a separate non-scaled
+  pseudo-element for the stroke), and that's real complexity this element
+  doesn't earn. **Correcting my earlier claim:** item 5's "pixel-identical" /
+  "exact match" language was accurate for the outer box dimensions only
+  (confirmed via `getBoundingClientRect`: 5×5 and 50×50, unchanged) — it did
+  not hold for the border stroke, which I hadn't checked. Both are documented
+  in the CSS now, not just in this log.
+- **`--intro-muted`'s own comment mis-cited its precedent.** It claimed to
+  follow "the same pattern as tokens.css's `--footer-text`/`--footer-muted`"
+  — factually wrong, since those live in `tokens.css` (global) and
+  `--intro-muted` was deliberately declared inside `artist.astro`'s own
+  component style. Corrected the comment to name the real, applicable
+  precedent already in the same file: `--scrim`, which is page-local for the
+  identical reason (a value with exactly one consumer, no reuse case). Did
+  **not** move the token to `tokens.css` — that would fix the letter of
+  CLAUDE.md's "add it to tokens.css first" rule while breaking the file's own
+  already-established `--scrim` pattern for genuinely page-specific values.
+- **Sanity fetch and `getImage()` ran sequentially with no dependency between
+  them.** `raw = await client.fetch(...)` then, ~80 lines later, `backdrop =
+  await getImage(...)` — the latter's only input is a static local import,
+  independent of the Sanity result. Restructured to `Promise.all([...])`,
+  moved the BACKDROP comment block up to sit with it. Build-time-only (SSG),
+  so the real-world saving is small on a 32-page build, but it was a free,
+  zero-risk fix. Verified the page still renders correctly after the
+  restructure: backdrop image resolved, biography text present, portrait
+  loaded — checked live, not assumed from the diff.
+
+**Left unfixed, with the risk written down:**
+- **`storyPages`'s new alt field is named `alt`; `artwork.ts`'s equivalent is
+  `altText`.** Real inconsistency. **Not renamed**, because renaming a Sanity
+  field name is a dataset change, not a code change: two collection documents
+  already have real alt text authored under the key `alt` in the live
+  production dataset (see the code-review-triggering session's own work,
+  above). Renaming the schema field without first migrating those values to
+  the new key would make Studio show them as empty — not deleted, but
+  invisible to the next person who opens it, which is worse than leaving the
+  inconsistency named and explained. Documented inline in
+  `sanity/schemas/collection.ts`: fix via a proper Sanity migration that
+  copies `storyPages[].alt` → `storyPages[].altText` across the dataset
+  first, then rename the field.
+
+**Investigated, not a bug:**
+- **`surface-contrast.mjs` duplicates `footer-contrast.mjs`'s WCAG math
+  instead of sharing a module.** True — `luminance()`, `contrast()`, `over()`,
+  `parseRgba()`, `windowMean()` are near-verbatim copies, no `scripts/lib/`
+  exists for them to share. Not extracted this session: `footer-contrast.mjs`
+  is a working, independently-relied-on tool nothing here required touching,
+  and there are exactly two consumers of this math today. Documented in
+  `surface-contrast.mjs`'s own header as an acknowledged risk (a fix to one's
+  constants or math has to be applied to both, and neither will warn you if
+  they drift) with the extraction path named for whenever a third surface or
+  an actual disagreement between the two makes it worth doing.
 
 ### Completed
 - **`/impeccable audit src/pages/artist.astro`** — scored **15/20 (Good)**.
@@ -31,6 +132,144 @@
   being rebuilt from prose a third time. **Read its header before using it** —
   it documents the two measurement traps that produced false numbers in this
   session.
+- **Fix queue item 2 — `.location` contrast, fixed.** New page-scoped token
+  `--intro-muted` on `.artist` (light `rgba(26,20,18,0.68)`, dark
+  `rgba(240,235,227,0.58)`), used only by `.location` — same pattern as
+  tokens.css's `--footer-text`/`--footer-muted`, not a global bump to
+  `--text-muted` (everything else on this backdrop already cleared 4.5 by a
+  wide margin). Re-verified with `surface-contrast.mjs` against a fresh
+  production build/screenshot, same method as the audit: **light 4.40→5.25:1,
+  dark 4.47→5.53:1**, both now real passes. Screenshot-diffed against the
+  pre-fix render — no visible change.
+- **Fix queue item 3 — `.available-item` 88px, fixed.** `clamp(32px, 7.3vw,
+  88px)` → `clamp(32px, 6.6vw, 80px)`. 6.6vw, not left at 7.3vw, to hold the
+  original crossover viewport (~1205px, where the fluid value first hits the
+  cap) constant — only the ceiling moved, not the shape of the curve.
+  Verified at 1920px: `.available-item` and the homepage hero name
+  (`.hero-name`) both resolve to exactly **80px** — tied, not exceeding, which
+  is what DESIGN.md's "single largest text on the site" claim requires. At
+  1024px the rendered size (67.584px) matches `1024 × 0.066` to the decimal,
+  confirming the curve math. No horizontal overflow, no wrapping regression at
+  1024/1440/1920 — screenshotted at 1440 dark theme, three-item list reads
+  clean. Stale comment claiming this size was "pushed a further step past the
+  original ceiling" removed; replaced with the 80px-cap rationale and a
+  pointer back to how it was decided (grep every clamp ceiling in the repo,
+  not by eye).
+- **Fix queue item 4 — `.available-cta` touch target, fixed.** Was 189×25px
+  against DESIGN.md's 44px floor. Fixed with a `::before` expanded hit area
+  (`position: absolute; height: 44px`, vertically centred via
+  `top:50%; transform:translateY(-50%)`) rather than padding — padding would
+  have pushed the underline away from the text or grown the visible box.
+  Zero visual change: underline, type size and weight are byte-identical to
+  before. This is the pattern WCAG 2.2's own understanding doc for SC 2.5.8
+  describes for a thin inline link that must stay visually thin. Verified by
+  hit-testing `elementFromPoint` at offsets from the visible box's centre:
+  hits the anchor from **−22px to +20px**, misses outside that — a real 44px
+  clickable band, not just a claim. Screenshotted before/after: pixel-identical.
+- **Fix queue item 5 — cursor `width`/`height` transition, fixed, sitewide.**
+  `Layout.astro`'s `.cursor`/`.cursor-ring` hover transition moved from
+  `width, height` (layout properties) to `transform: scale()`
+  (compositor-only). Boxes now stay fixed at 9px/34px in both states — only
+  the paint scales. Scale factors (0.5556, 1.4706) are exact ratios of the old
+  hover sizes (5/9, 50/34), chosen so the visual result is pixel-identical, not
+  approximate. `translate(-50%,-50%)` (the existing centring transform)
+  resolves against the element's own unscaled box before `scale()` applies in
+  the same transform list, so centring is unaffected. Verified: rest-state
+  `getComputedStyle` width/height unchanged (9px/34px) with
+  `transitionProperty: transform`; hovered a real nav link via the
+  chrome-devtools `hover` tool and read `getBoundingClientRect()` post-
+  transition — **5×5px cursor, 50×50px ring, exact match to the pre-fix
+  values**. Also checked the one place that manipulates these nodes directly:
+  the collection lightbox physically moves `#cursor`/`#cursor-ring` into the
+  `<dialog>` while open (to escape top-layer stacking) — confirmed that still
+  works and the nodes keep `transitionProperty: transform` after the move.
+- **Fix queue item 6 — `will-change` never released, fixed.** Was a static
+  CSS declaration on `.backdrop`'s resting rule, so it held a compositor layer
+  open for the page's entire lifetime — including under reduced-motion, where
+  the parallax script's whole `if` branch (and the only place that ever writes
+  a transform) never runs. Moved from CSS into that same branch in the script,
+  set once alongside the scroll listeners rather than toggled on/off, since
+  there's no point in this page's lifecycle where the parallax "ends" while
+  the section still exists to release it into. Verified both branches for
+  real, not by reading code alone: normal motion —
+  `backdrop.style.willChange` is `'transform'` and the transform actually
+  moves on scroll (`matrix(1,0,0,1,0,49.75)` at scrollY 400). Reduced motion —
+  forced via an `initScript` that monkey-patches `matchMedia()` for
+  `prefers-reduced-motion` before the page's own scripts run (this MCP's
+  `emulate` tool has no media-feature override, so this was the only way to
+  drive a *real* reduced-motion pass rather than reasoning from the source):
+  `getComputedStyle(backdrop).willChange` reads **`'auto'`**, and the
+  transform stays at identity even after scrolling — confirms the leak is
+  actually gone, not just reasoned away.
+- **Fix queue item 7 — one of the two off-scale radii, fixed; the other
+  confirmed a false positive, not touched.**
+  - `.deck-cta` (`collections/[slug].astro`) — `border-radius: 2px` → `0`.
+    This is the mobile-only bar that replaces the plate grid as the way into
+    the deck lightbox below 768px: it sits in normal document flow, not
+    floating over an image, so per DESIGN.md's Sharp-vs-Pill rule it's the
+    sharp register, same as every other CTA and panel on the site — not a
+    third, in-between value. Verified live at 500px: `borderRadius: '0px'`,
+    and confirmed still `display: none` at 1024px (no regression to the
+    breakpoint itself). Screenshotted — reads as a clean rectangle CTA,
+    unchanged otherwise.
+  - `#main-content:focus-visible` / global `a:focus-visible,button:focus-visible`
+    (`Layout.astro:440`, `global.css:144`) — **left at 1px, not a real
+    finding.** Read both rules: identical values (`outline: 2px solid
+    var(--accent); outline-offset: 3px; border-radius: 1px`), duplicated only
+    because Astro's scoped CSS can't reach elements outside its own component
+    (documented in both files' own comments — `#main-content` lives in
+    Layout.astro's markup so it needs the scoped copy, `a`/`button` need the
+    unscoped one to reach every other component). This is an accessibility
+    focus-ring detail applied consistently sitewide, not a
+    content/component shape decision — DESIGN.md's Sharp-vs-Pill rule
+    governs artwork frames, buttons, chips, badges, not outline rendering.
+    Rounding a 2px outline sitting 3px off a rectangle to 0 or 6 or 999 would
+    look worse, not more on-system. Detector false positive; do not
+    "fix" this if it resurfaces.
+- **All six fixes uncommitted, three files.** `src/pages/artist.astro` (items
+  2, 3, 4, 6), `src/layouts/Layout.astro` (item 5), and
+  `src/pages/collections/[slug].astro` (item 7); `astro check` 0/0/0, build
+  clean 32 pages after each. Not yet git-added.
+- **Fix queue item 8 — DESIGN.md regenerated. FIX QUEUE COMPLETE.**
+  "Elevation & Depth" no longer cites the two deleted /artist shadows
+  (`drop-shadow(0 24px 34px …)` on the cutout, `box-shadow: 0 18px 46px …` on
+  the framed-portrait fallback) — both gone since the studio-photo rebuild
+  earlier this session. The section now names shadow's one surviving use (the
+  homepage hero plate) and says explicitly that /artist is border-only now,
+  not silently drops the old claim. Grepped for `88px`, `cursor-hover`,
+  `is-cutout`, `is-framed`, `4 / 5` and other implementation numbers touched
+  this session — none appear in DESIGN.md, so no further doc drift from items
+  2–7 to chase. Three "About page" → "Artist page" wording fixes elsewhere in
+  the doc (Overview, Paper Elevated, Headline), left over from the route
+  rename earlier this session. **`DESIGN.md` is gitignored** (this session's
+  earlier decision) — this edit exists only in the working tree, same as the
+  PRODUCT.md edits from the rename. No code touched, so no check/build to
+  re-run for this item.
+
+### Second new finding — not fixed, flagged only
+- **Placeholder statement text shipped live on a real collection.**
+  `worlds-within-walls`'s Statement field (the pull-quote under the tagline)
+  reads literally **"this is sample collection"** — confirmed by direct
+  `getComputedStyle`/`textContent` read against the live page, at both mobile
+  and desktop widths, not a rendering artifact. Same class of bug as the
+  Threshold placeholder alt text above: real test/scaffold copy left in a
+  Sanity field on a document that is otherwise fully published and live on
+  the site's actual collections index. Found incidentally while
+  screenshotting the mobile `.deck-cta` fix; out of scope for this session's
+  fix queue, not fixed. Content fix in Studio → Collections → Worlds Within
+  Walls → Description (Statement).
+
+### New finding — not fixed, flagged only
+- **Placeholder alt text shipped live on the homepage.** The "Threshold"
+  artwork tile's `alt` (and its `<img>` alt) is the Sanity field's own
+  *help text* — `"Describe what is visible in the painting — subject, medium,
+  and mood. Used by screen readers and Google Images. Example: ..."` — not a
+  real description. Found incidentally while snapshotting the homepage a11y
+  tree to verify fix 5; not part of the audit or the fix queue, and not fixed
+  this session (out of scope for a cursor CSS change). Real WCAG 1.1.1 fail,
+  worse than an empty alt: a screen reader reads the *instructions* as if they
+  were the painting. Fix in Sanity Studio → Works → Threshold → Alt text; this
+  is a content fix, not a code fix.
 
 ### Fix queue — resume here
 
@@ -38,13 +277,13 @@
 |---|---|---|---|---|
 | 1 | P2 | Deck pages had no alt-text field at all | `sanity/schemas/collection.ts`, `types/collection.ts`, `collections/[slug].astro` | **DONE** |
 | 1b | — | Alt field `string` → `text` (rows 4) so Studio gives a textarea | `sanity/schemas/collection.ts` | **DONE** |
-| 2 | P1 | `.location` fails WCAG AA over the intro backdrop — **4.40:1 light / 4.47:1 dark**, needs 4.5 | `artist.astro:454-457` | **NEXT** |
-| 3 | P2 | `.available-item` `clamp(32px, 7.3vw, 88px)` — 88px is the largest type on the site, over DESIGN.md's 80px Display ceiling | `artist.astro:549` | not started |
-| 4 | P2 | `.available-cta` is **189×25px**, vs the 44px floor DESIGN.md states for chips. Passes WCAG 2.2 SC 2.5.8 (24px) by 1px | `artist.astro:555` | not started |
-| 5 | P2 | `.cursor` / `.cursor-ring` animate `width`/`height` — layout properties, on a mouse-tracking element, **sitewide** | `Layout.astro:474,482` | not started |
-| 6 | P3 | `will-change: transform` on `.backdrop` never released; stays set under reduced-motion where the script never runs | `artist.astro:312` | not started |
-| 7 | P3 | Off-scale radii: `2px`, `1px` (DESIGN.md scale is 0 / 6px / 999px) | `collections/[slug].astro:546`, `Layout.astro:440` | not started |
-| 8 | P3 | DESIGN.md "Elevation & Depth" still cites the cutout `drop-shadow` and framed-portrait `box-shadow` — both deleted; /artist now has **zero** shadows. Also still says "About page" | DESIGN.md | do LAST |
+| 2 | P1 | `.location` fails WCAG AA over the intro backdrop — was 4.40:1 light / 4.47:1 dark, needs 4.5 | `artist.astro:454-457` | **DONE (uncommitted)** — now 5.25:1 / 5.53:1 via new `--intro-muted` token |
+| 3 | P2 | `.available-item` `clamp(32px, 7.3vw, 88px)` — 88px is the largest type on the site, over DESIGN.md's 80px Display ceiling | `artist.astro:549` | **DONE (uncommitted)** — now `clamp(32px, 6.6vw, 80px)`, ties the hero at 80px |
+| 4 | P2 | `.available-cta` was **189×25px**, vs the 44px floor DESIGN.md states for chips | `artist.astro:555` | **DONE (uncommitted)** — `::before` expanded hit area, visible box unchanged |
+| 5 | P2 | `.cursor` / `.cursor-ring` animated `width`/`height` — layout properties, on a mouse-tracking element, **sitewide** | `Layout.astro:474,482` | **DONE (uncommitted)** — `transform: scale()`, pixel-identical hover sizes |
+| 6 | P3 | `will-change: transform` on `.backdrop` was never released; stayed set under reduced-motion where the script never runs | `artist.astro:312` | **DONE (uncommitted)** — moved into the script's own motion-branch, verified both branches |
+| 7 | P3 | Off-scale radii: `2px`, `1px` (DESIGN.md scale is 0 / 6px / 999px) | `collections/[slug].astro:546`, `Layout.astro:440` | **DONE (uncommitted)** — `.deck-cta` fixed to 0; `#main-content`/global focus-ring 1px confirmed false positive, left alone |
+| 8 | P3 | DESIGN.md "Elevation & Depth" still cites the cutout `drop-shadow` and framed-portrait `box-shadow` — both deleted; /artist now has **zero** shadows. Also still said "About page" | DESIGN.md | **DONE (gitignored — working-tree only)** |
 
 Item 8 is deliberately last: regenerate DESIGN.md only after 2–7 land, or it
 documents a state that is about to change again.
