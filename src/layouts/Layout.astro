@@ -380,6 +380,10 @@ const copyrightYear = new Date().getFullYear();
 
         var mouseX = 0, mouseY = 0;
         var ringX = 0, ringY = 0;
+        // Both nodes sit at top:0/left:0 until the first real mousemove —
+        // without this, they paint as a stray dot+ring in the top-left
+        // corner on load, since nothing repositions them before then.
+        var hasMoved = false;
 
         window.addEventListener('mousemove', function (e) {
           mouseX = e.clientX;
@@ -390,10 +394,21 @@ const copyrightYear = new Date().getFullYear();
             ring.style.left = mouseX + 'px';
             ring.style.top = mouseY + 'px';
           }
+          if (!hasMoved) {
+            hasMoved = true;
+            // Snap the ring straight to the pointer instead of letting the
+            // lerp below animate it in from the corner it was hidden at.
+            ringX = mouseX;
+            ringY = mouseY;
+            ring.style.left = ringX + 'px';
+            ring.style.top = ringY + 'px';
+            cursor.classList.add('cursor-armed');
+            ring.classList.add('cursor-armed');
+          }
         });
 
         function loop() {
-          if (!reduceMotion) {
+          if (hasMoved && !reduceMotion) {
             ringX += (mouseX - ringX) * 0.12;
             ringY += (mouseY - ringY) * 0.12;
             ring.style.left = ringX + 'px';
@@ -464,6 +479,11 @@ const copyrightYear = new Date().getFullYear();
     pointer-events: none;
     border-radius: 50%;
     z-index: 9999;
+    /* Hidden until the script's first mousemove positions it — see the
+       cursor-armed comment in the script below. Visibility, not opacity:
+       .cursor-ring already carries its own opacity: 0.5 as a steady-state
+       value, and this needs a separate on/off switch that doesn't fight it. */
+    visibility: hidden;
     /* translate(-50%, -50%) resolves against the element's own (unscaled)
        border box before the rest of the transform list applies, so appending
        scale() here doesn't disturb the centring — the box being centred never
@@ -516,6 +536,11 @@ const copyrightYear = new Date().getFullYear();
        real complexity this element doesn't earn. .cursor has no border, so it
        doesn't need any of this. */
     border-width: 0.68px;
+  }
+
+  .cursor.cursor-armed,
+  .cursor-ring.cursor-armed {
+    visibility: visible;
   }
 
   @media (hover: none) {
