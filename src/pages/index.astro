@@ -1,5 +1,4 @@
 ---
-import { getImage } from 'astro:assets';
 import Layout from '../layouts/Layout.astro';
 import { client, urlFor } from '../lib/sanity/client';
 import { parseList } from '../lib/sanity/parse';
@@ -13,7 +12,6 @@ import {
 import { ArtworkSchema, type Artwork } from '../types/artwork';
 import { CollectionSchema, type Collection } from '../types/collection';
 import { HomepageSchema } from '../types/homepage';
-import heroBackdropSource from '../assets/hero/Hero-BG.png';
 
 const featuredRaw = await client.fetch(FEATURED_ARTWORKS_QUERY).catch(() => null);
 const featuredArtworks = parseList(ArtworkSchema, featuredRaw, 'FEATURED_ARTWORKS_QUERY');
@@ -77,25 +75,6 @@ function heroFocusFrom(image: NonNullable<Artwork['image']>): string {
     : '50% 50%';
 }
 const heroFocus = heroImage ? heroFocusFrom(heroImage) : '50% 50%';
-
-// Static gallery backdrop behind the scroll-expanding plate — always present,
-// not swapped via Sanity like heroUrl above. Same reasoning as artist.astro's
-// --backdrop: routed through getImage() rather than referenced from CSS by
-// path, so the raw local PNG doesn't ship as-is; this hands back a hashed
-// WebP to interpolate into the custom property below.
-// width: 1366 is the source file's own width (Hero-BG.png is 1366×768) — not
-// a deliberate crop target. Do not raise it without a higher-res source;
-// Sharp will upscale past the source rather than error, which would ship a
-// softened image at a bigger byte cost for zero real detail. On viewports
-// wider than 1366px this still stretches via background-size: cover, same
-// as it would with any width value <= source — that softness is a source-
-// asset ceiling, not something fixable in this file.
-const heroBackdrop = await getImage({
-  src: heroBackdropSource,
-  format: 'webp',
-  quality: 78,
-  width: 1366,
-});
 
 // Each collection gets exactly one <img>; the browser picks the width from
 // srcset rather than the markup shipping a copy per breakpoint.
@@ -252,11 +231,7 @@ const tiles = recentWorks.map((artwork, i) => {
 ---
 
 <Layout title="Home" navMode="glass">
-  <section
-    class="hero-track"
-    id="hero-track"
-    style={`--hero-bg:url('${heroBackdrop.src}')`}
-  >
+  <section class="hero-track" id="hero-track">
     <div class="hero">
       <div class="hero-frame">
         {heroUrl ? (
@@ -585,17 +560,21 @@ const tiles = recentWorks.map((artwork, i) => {
     height: 100vh;
     width: 100%;
     overflow: hidden;
-    /* Gallery backdrop, added behind the plate. Purely additive: .hero-frame,
-       .hero-media, .hero-overlay and the --p scroll script are untouched, so
-       the plate-opening animation keeps its exact existing behaviour — this
-       is just what's visible around and through it while --p < 1.
-       background-position is a starting point (the empty frame in the source
-       photo sits left-of-centre, slightly above the vertical middle) — nudge
-       it once this is checked against the real breakpoints. */
-    background-image: var(--hero-bg);
-    background-size: cover;
-    background-position: 50% 40%;
-    background-repeat: no-repeat;
+    /* Soft studio-wall gradient behind the plate, replacing the old photo
+       backdrop. That photo had to line up with the plate's screen position,
+       which only held at its native 1366×768 crop — any wider viewport
+       stretched it via background-size: cover and the "empty frame on the
+       wall" drifted away from .hero-frame. A gradient has no alignment to
+       break: it reads correctly at every viewport width. Built entirely
+       from theme tokens (color-mix against --accent) so it re-tints
+       automatically for the dark variant — no separate dark-mode rule
+       needed here. */
+    background-image: radial-gradient(
+        120% 85% at 50% 28%,
+        var(--bg-secondary) 0%,
+        var(--bg-primary) 55%,
+        color-mix(in srgb, var(--accent) 10%, var(--bg-primary)) 100%
+      );
   }
 
   .hero-track.is-animated .hero {
