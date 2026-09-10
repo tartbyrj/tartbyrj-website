@@ -1,0 +1,412 @@
+---
+// Homepage section 5 — one feature block for the next upcoming/current
+// exhibition, with prev/next arrows that stay inert until there is more than
+// one show to cycle through. Not a grid, not an auto-advancing carousel —
+// locked design, ARCHITECTURE.md §17/§22 (PRD-Exhibitions-2-Homepage-Section.md).
+import { getAllExhibitions } from '../../lib/exhibitions/data';
+import { getTense } from '../../lib/exhibitions/tense';
+import { formatDateRange } from '../../lib/exhibitions/format';
+import { urlFor } from '../../lib/sanity/client';
+import type { Exhibition } from '../../types/exhibition';
+
+const exhibitions = await getAllExhibitions();
+
+// §4.1 — feature set: current/upcoming, soonest first. Opposite order from
+// EXHIBITIONS_ALL_QUERY's own startDate desc, so the sort here is deliberate,
+// not a mistake to "fix" into matching the query.
+const featureSet = exhibitions
+  .filter((exhibition) => {
+    const tense = getTense(exhibition);
+    return tense === 'upcoming' || tense === 'current';
+  })
+  .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''));
+
+let featured: Exhibition | null = featureSet[0] ?? null;
+let isFallback = false;
+
+// §4.3 — empty feature set falls back to the single most recent past show.
+if (!featured) {
+  const mostRecentPast = exhibitions
+    .filter((exhibition) => getTense(exhibition) === 'past')
+    .sort((a, b) => (b.endDate ?? '').localeCompare(a.endDate ?? ''))[0];
+  featured = mostRecentPast ?? null;
+  isFallback = true;
+}
+
+// §7 — arrows cycle the feature set, never the fallback (exactly one item
+// there) and never the full archive.
+const cycleSet = isFallback ? (featured ? [featured] : []) : featureSet;
+
+const COVER_WIDTHS = [480, 800, 1200];
+const COVER_SIZES = '(min-width: 640px) 380px, 100vw';
+
+function coverSrcSet(cover: NonNullable<Exhibition['coverImage']>): string {
+  return COVER_WIDTHS.map(
+    (w) => `${urlFor(cover).width(w).format('webp').quality(85).fit('max').url()} ${w}w`
+  ).join(', ');
+}
+
+// Same hotspot/crop-aware focus math as index.astro's heroFocusFrom /
+// workGeometry — not extracted to a shared util because each caller reads
+// from a differently-shaped image field, and three call sites is not yet a
+// pattern worth the indirection.
+function pct(fraction: number): string {
+  return `${(Math.min(Math.max(fraction, 0), 1) * 100).toFixed(1)}%`;
+}
+
+function coverFocus(cover: NonNullable<Exhibition['coverImage']>): string {
+  const hotspot = cover.hotspot;
+  const crop = cover.crop;
+  const left = crop?.left ?? 0;
+  const top = crop?.top ?? 0;
+  const keptW = 1 - left - (crop?.right ?? 0);
+  const keptH = 1 - top - (crop?.bottom ?? 0);
+  const usable = keptW > 0 && keptH > 0;
+  return hotspot && usable
+    ? `${pct((hotspot.x - left) / keptW)} ${pct((hotspot.y - top) / keptH)}`
+    : '50% 50%';
+}
+
+// §6 — omit country gracefully if null; join what exists so a missing field
+// never leaves a dangling separator.
+function venueLine(exhibition: Exhibition): string {
+  return [exhibition.venue, exhibition.city, exhibition.country].filter(Boolean).join(', ');
+}
+
+// §6 state D — driven by the primary (index 0) item. The current inventory
+// is a single feature; a mixed image/no-image state across a 2+ cycle set is
+// not a case the locked design specifies, so this stays keyed off the item
+// actually shown by default (no-JS baseline).
+const showImageColumn = Boolean(featured?.coverImage);
+---
+
+{featured && (
+  <section id="exhibitions" class="ex reveal" data-exhibitions-feature>
+    <div class="wrap">
+      <div class="ex-head">
+        <span class="ex-eyebrow">Exhibitions</span>
+        <a class="ex-aside" href="/exhibitions">View all exhibitions</a>
+      </div>
+
+      <div class:list={['feature', !showImageColumn && 'feature-solo']}>
+        {showImageColumn && (
+          <div class="plate-wrap">
+            {cycleSet.map((exhibition, i) => (
+              <figure
+                class:list={['plate', i === 0 && 'is-active']}
+                data-ex-plate
+                data-ex-index={i}
+              >
+                {exhibition.coverImage && (
+                  <img
+                    src={urlFor(exhibition.coverImage).width(800).format('webp').quality(85).fit('max').url()}
+                    srcset={coverSrcSet(exhibition.coverImage)}
+                    sizes={COVER_SIZES}
+                    width="800"
+                    height="600"
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    style={`--focus:${coverFocus(exhibition.coverImage)}`}
+                  />
+                )}
+              </figure>
+            ))}
+          </div>
+        )}
+
+        <div class="ex-detail-wrap">
+          {cycleSet.map((exhibition, i) => (
+            <div
+              class:list={['ex-detail', i === 0 && 'is-active']}
+              data-ex-detail
+              data-ex-index={i}
+              data-ex-slug={exhibition.slug.current}
+            >
+              <p class="ex-kicker">{isFallback ? `Most recent ${exhibition.type ?? ''}`.trim() : exhibition.type}</p>
+              <h2 class="ex-title">{exhibition.title}</h2>
+              {exhibition.startDate && (
+                <p class="ex-dates">{formatDateRange(exhibition.startDate, exhibition.endDate)}</p>
+              )}
+              <p class="ex-venue">{venueLine(exhibition)}</p>
+            </div>
+          ))}
+
+          <div class="feature-foot">
+            <a class="view-link" href={`/exhibitions/${featured.slug.current}`} data-ex-view-link>
+              View details <span aria-hidden="true">→</span>
+            </a>
+            <div class="arrows">
+              <button
+                type="button"
+                data-ex-prev
+                aria-label="Previous exhibition"
+                disabled={cycleSet.length <= 1}
+                aria-disabled={cycleSet.length <= 1 ? 'true' : 'false'}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                data-ex-next
+                aria-label="Next exhibition"
+                disabled={cycleSet.length <= 1}
+                aria-disabled={cycleSet.length <= 1 ? 'true' : 'false'}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+)}
+
+<script is:inline>
+  (function () {
+    // §7 — with <=1 item in the feature set the buttons render disabled and
+    // this script binds nothing at all, not even the listeners below.
+    var roots = document.querySelectorAll('[data-exhibitions-feature]');
+    for (var r = 0; r < roots.length; r++) {
+      (function (root) {
+        var plates = root.querySelectorAll('[data-ex-plate]');
+        var details = root.querySelectorAll('[data-ex-detail]');
+        var prev = root.querySelector('[data-ex-prev]');
+        var next = root.querySelector('[data-ex-next]');
+        var viewLink = root.querySelector('[data-ex-view-link]');
+        if (!prev || !next || details.length <= 1) return;
+
+        var slugs = [];
+        for (var i = 0; i < details.length; i++) {
+          slugs.push(details[i].getAttribute('data-ex-slug'));
+        }
+
+        var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        root.classList.toggle('ex-instant', reduceMotion);
+
+        var index = 0;
+
+        function show(nextIndex) {
+          index = (nextIndex + details.length) % details.length;
+          for (var p = 0; p < plates.length; p++) {
+            plates[p].classList.toggle('is-active', p === index);
+          }
+          for (var d = 0; d < details.length; d++) {
+            details[d].classList.toggle('is-active', d === index);
+          }
+          if (viewLink && slugs[index]) {
+            viewLink.setAttribute('href', '/exhibitions/' + slugs[index]);
+          }
+        }
+
+        prev.addEventListener('click', function () {
+          show(index - 1);
+        });
+        next.addEventListener('click', function () {
+          show(index + 1);
+        });
+      })(roots[r]);
+    }
+  })();
+</script>
+
+<style>
+  .ex {
+    padding-block: clamp(80px, 10vw, 130px);
+    padding-inline: clamp(24px, 4vw, 56px);
+    background: var(--bg-primary);
+    scroll-margin-top: var(--nav-h);
+  }
+
+  .wrap {
+    container-type: inline-size;
+  }
+
+  .ex-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    border-top: 1px solid var(--border-strong);
+    padding-top: 22px;
+  }
+
+  .ex-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .ex-aside {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    transition: opacity var(--dur-base) ease;
+  }
+
+  .ex-aside:hover {
+    opacity: 0.68;
+  }
+
+  .feature {
+    display: grid;
+    gap: clamp(24px, 4cqw, 48px);
+    margin-top: clamp(30px, 4cqw, 48px);
+    align-items: center;
+  }
+
+  @container (min-width: 520px) {
+    .feature {
+      grid-template-columns: minmax(200px, 380px) 1fr;
+    }
+  }
+
+  .feature-solo {
+    max-width: 640px;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .plate-wrap {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  @container (max-width: 519px) {
+    .plate-wrap {
+      aspect-ratio: 3 / 2;
+    }
+  }
+
+  .plate {
+    margin: 0;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 500ms var(--ease-out);
+  }
+
+  .plate.is-active {
+    opacity: 1;
+  }
+
+  .ex-instant .plate {
+    transition-duration: 1ms;
+  }
+
+  .plate img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: var(--focus, 50% 50%);
+  }
+
+  .ex-detail-wrap {
+    position: relative;
+  }
+
+  .ex-detail {
+    display: none;
+  }
+
+  .ex-detail.is-active {
+    display: block;
+  }
+
+  .ex-kicker {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+  }
+
+  .ex-title {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(28px, 3.6cqw, 42px);
+    line-height: 1.08;
+    color: var(--text-primary);
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .ex-dates {
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    margin: 0 0 6px;
+  }
+
+  .ex-venue {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(15px, 1.7cqw, 18px);
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .feature-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .feature-solo .feature-foot {
+    justify-content: center;
+  }
+
+  .view-link {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .arrows {
+    display: flex;
+    gap: 8px;
+  }
+
+  .arrows button {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    background: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .arrows button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .arrows button[disabled] {
+    opacity: 0.35;
+    cursor: default;
+  }
+</style>
