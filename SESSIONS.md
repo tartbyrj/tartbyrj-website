@@ -98,10 +98,12 @@ invisible to `astro check`:
   into `<ExhibitionMeta>` lands that class on an element carrying
   *ExhibitionMeta's* `data-astro-cid`, but the rule compiled against the
   *parent's* — `.ex-card-meta[data-astro-cid-fiq27e6o]`, which matched
-  nothing. Computed `margin-bottom` was `0px`; now `16px` (and `22px` for
-  `.head-meta`). Fixed with `.ex-card-body :global(.ex-card-meta)` so it
-  works without leaking site-wide. **This is a general trap: any class passed
-  into a child component needs `:global()` on the child half.**
+  nothing. Computed `margin-bottom` was `0px`. First fixed with
+  `.ex-card-body :global(.ex-card-meta) { margin-bottom: 16px }` — this
+  round's `:global()` call was wrong on reflection, and superseded the same
+  day by the gap refactor below. **Do not read this as "any class passed
+  into a child needs `:global()`" — see the corrected version of that
+  general rule further down.**
 - **Canonical pointed at a redirect.** I hand-built it from the slug, giving
   `/exhibitions/houston` — the only canonical on the site without a trailing
   slash, while every other route emits one under the directory build format.
@@ -119,17 +121,80 @@ last-card fix would have keyed everything off JS. Kept `:last-child` as the
 no-JS baseline and added `.is-last-visible` only for the filtered case —
 otherwise the borderless-last-card treatment breaks entirely with JS off.
 
+### Follow-up round: `:global()` replaced with parent-owned layout, `aria-live` narrowed, §22/§23 written
+
+Same day, a second pass on two things the review round above had left in a
+worse state than they needed to be.
+
+**The `:global()` fix was itself a trap, just a different one.** It made the
+symptom disappear, but it does that by matching on `ExhibitionMeta`'s bare
+class name regardless of scope — reaching into the child's internals from
+outside, which breaks again the moment `ExhibitionMeta` renames that class,
+with the exact same silent failure mode (no error, `margin-bottom: 0px`).
+Replaced with `display: flex; flex-direction: column; gap: 16px` (`22px` on
+the detail page's `.head`) on the parent, `.ex-card-body` / `.head`. `gap` is
+a layout property of the container, not a selector, so there's no class name
+for a rename to break.
+
+The parent's own children (`.ex-card-badge`, `.ex-card-title`, `.head-badge`,
+`.head-tagline`) carry small compensating margins where the *original*
+per-element margin-bottom didn't already equal the base gap — derived from
+`getBoundingClientRect()` measurements taken **before** touching any CSS, not
+assumed:
+
+- ExhibitionCard (base 16px): badge→title and title→tagline were 10px, both
+  now via `-6px` margins on `.ex-card-badge` / `.ex-card-title`. Excerpt→CTA
+  was 18px (`+2px` on `.ex-card-excerpt`) — derived by the same math but
+  **unverified live**, since today's only published exhibition has no
+  excerpt.
+- Detail page `.head` (base 22px): badge→title was 14px (`-8px` on
+  `.head-badge`); title→tagline was 16px (`-6px` on `.head-tagline`, a
+  margin-top so it only applies when tagline actually renders — when it
+  doesn't, title→meta correctly falls through to the unmodified 22px base,
+  which is what that transition always was).
+
+Measured after, against the same baseline: **3 of 4 pairs on the card, and
+all 3 measured pairs on the detail page, are pixel-exact.** The one that
+isn't — card meta→CTA, `21.5px → 16px` — is a real, disclosed change, not an
+error: the original 21.5 was never a deliberate value, it was `.ex-card-meta`'s
+16px margin plus ~5.5px of inline-box font leading from `.ex-card-cta` being
+a `<span>` in block layout. Flexbox blockifies that span, the stray leading
+disappears, and the gap lands on the number the CSS actually asked for.
+Screenshotted both pages in light theme after, spacing reads correctly.
+
+**`aria-live` on the homepage carousel wrapped the whole card.** Confirmed
+before touching anything: `.ex-detail-wrap` carried `aria-live="polite"` and
+contained every cycled panel (kicker, title, dates, venue) — a
+`display:none → block` swap inside a live region is exactly the kind of
+content change screen readers announce, so every arrow press re-read the
+entire card. Removed from `.ex-detail-wrap`; added a `.sr-only[aria-live]`
+status node in `.feature-foot`, updated by `show()` to "Exhibition 2 of 3"
+(position only). Verified against the actual shipped script — injected a
+synthetic 2-item root, re-ran the current `show()` body against it, clicked
+Next then Prev: status text and the `view-link` href updated together both
+directions, and the node stays empty until a click actually happens (no
+spurious announcement on load).
+
+**ARCHITECTURE.md §22 and §23 now exist**, written minimal but real (not
+placeholder stubs) — locked structure, states, and data-selection rules for
+the homepage section (§22) and the routes, filter tabs, three-case prev/next,
+and the `openingReception` reasoning for `/exhibitions` (§23), plus both
+silent-failure classes (container-query self-reference, scoped-class
+cross-boundary) recorded together in §23 and mirrored in CLAUDE.md. This
+closes the "§22/§23 don't exist" gap noted below in the previous version of
+this entry.
+
+`npm test` 28/28, `astro check` 0/0/0, build clean — re-verified after this
+round, not just the round before it.
+
 ### Not done / open
 
-- **ARCHITECTURE.md §22 and §23 do not exist.** All three PRDs cite them as
-  locked-design records ("§22 (homepage section, locked)", "§23 (exhibitions
-  pages, locked)"); the file ends at §21. The exhibitions decisions therefore
-  have no home in ARCHITECTURE.md, and this session's doc updates were
-  scoped to CLAUDE.md, PRD 1 and this log by explicit decision. Creating
-  §22/§23 is still outstanding.
-- Multi-card filtering border and the mixed-cover carousel are verified by
-  code/CSS inspection only — one published exhibition isn't enough to
-  exercise either live.
+- **Multi-card filtering border and the mixed-cover carousel are verified by
+  code/CSS inspection only** — one published exhibition isn't enough to
+  exercise either live. The filter-border logic (`.is-last-visible`) and the
+  mixed cover/no-cover carousel fallback both need a second published
+  exhibition (ideally one with excerpt, tagline, and no cover image filled
+  in) to confirm on real data rather than synthetic DOM injection.
 - Lighthouse, Google Rich Results, and real Studio round-trip all need the
   published site.
 - Nav active state is semantic only (`aria-current="page"`); no nav item on

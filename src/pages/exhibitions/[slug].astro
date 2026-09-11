@@ -215,7 +215,7 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
             admission, reception and address, while these two facts are what
             someone needs before deciding to read any further — an exhibition
             page that makes you hunt for the dates has buried its lede. */}
-        <ExhibitionMeta dates={dates} venue={venueLine} class="head-meta" />
+        <ExhibitionMeta dates={dates} venue={venueLine} />
       </header>
     </div>
 
@@ -412,12 +412,23 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
   }
 
   /* ─── HEAD ─── */
+  /* flex + gap owns the spacing between these children, not per-element
+     margin — see the note on the old :global(.head-meta) rule this
+     replaced, further down. 22px is the base rhythm, matching what
+     head-meta's own margin-top was. head-badge carries a small
+     compensating margin below, derived from measuring the ORIGINAL
+     rendered gap in the browser (14px, not 22 — tighter around the
+     small-caps badge line), not assumed. */
   .head {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
     padding-block: clamp(28px, 4vw, 44px) clamp(24px, 3vw, 36px);
   }
 
   .head-badge {
-    margin: 0 0 14px;
+    /* -8px nets 14px before the title against the 22px base gap. */
+    margin: 0 0 -8px;
     font-size: 10.5px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -443,7 +454,13 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
   }
 
   .head-tagline {
-    margin: 16px 0 0;
+    /* -6px nets 16px after the title against the 22px base gap. Governs the
+       title→tagline gap specifically (a margin-top, not the preceding
+       element's margin-bottom), so it only applies when tagline actually
+       renders — when it doesn't, title→meta correctly falls through to the
+       unmodified 22px base, which is what that transition was originally
+       too (head-title never carried its own bottom margin). */
+    margin: -6px 0 0;
     max-width: 52ch;
     font-family: var(--font-serif);
     font-style: italic;
@@ -451,13 +468,14 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
     color: var(--text-secondary);
   }
 
-  /* :global() for the same reason as .ex-card-meta in ExhibitionCard —
-     the class is passed into <ExhibitionMeta>, so it lands on an element
-     carrying that component's cid, not this page's. Scoped under .head so
-     it cannot leak. */
-  .head :global(.head-meta) {
-    margin-top: 22px;
-  }
+  /* No rule here for ExhibitionMeta's own spacing — see .head above. A
+     previous version tried .head :global(.head-meta) { margin-top: 22px },
+     passing a class into <ExhibitionMeta> for the parent to target. It
+     compiled to .head-meta[data-astro-cid-<THIS FILE>], which never matched
+     (that element carries ExhibitionMeta's own cid), so the margin silently
+     did nothing — CLAUDE.md's "Astro scoped-class trap" entry. flex + gap on
+     .head doesn't select into the child at all, so there's nothing to break
+     if ExhibitionMeta ever renames its internals. */
 
   /* ─── COVER ─── */
   .cover {

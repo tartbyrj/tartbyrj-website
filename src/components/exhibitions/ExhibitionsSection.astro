@@ -126,13 +126,15 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
           </div>
         )}
 
-        {/* aria-live: the arrows swap the visible panel without moving
-            focus, so without this a screen-reader user presses "Next
-            exhibition" and hears nothing — the title, dates and venue
-            change silently and the "View details" link retargets under
-            them. polite, not assertive: this is a user-initiated change,
-            not an interruption. */}
-        <div class="ex-detail-wrap" aria-live="polite">
+        {/* NOT aria-live: the full card (kicker, title, dates, venue) lived
+            in a live region here before — every arrow press re-announced
+            the whole thing, since a display:none → block swap inside a live
+            region is a content change the same as if it had just been
+            typed. A sighted user only needs the visual swap; a screen-reader
+            user needs one short position announcement, not the full card
+            read out twice. See the .sr-only status node in .feature-foot
+            below, which carries aria-live instead. */}
+        <div class="ex-detail-wrap">
           {cycleSet.map((exhibition, i) => (
             <div
               class:list={['ex-detail', i === 0 && 'is-active']}
@@ -173,6 +175,14 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
                 ›
               </button>
             </div>
+            {/* Position only ("Exhibition 2 of 3"), not the card content —
+                that's the whole point of moving aria-live here instead of
+                onto .ex-detail-wrap. Empty until the script populates it, so
+                there's nothing to announce when cycling can't happen
+                (cycleSet.length <= 1, the disabled-arrows case) or before
+                JS runs. sr-only, reused from global.css — visible on screen
+                would just be visual noise duplicating the arrows. */}
+            <p class="sr-only" aria-live="polite" data-ex-status></p>
           </div>
         </div>
       </div>
@@ -192,6 +202,7 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
         var prev = root.querySelector('[data-ex-prev]');
         var next = root.querySelector('[data-ex-next]');
         var viewLink = root.querySelector('[data-ex-view-link]');
+        var status = root.querySelector('[data-ex-status]');
         if (!prev || !next || details.length <= 1) return;
 
         var slugs = [];
@@ -214,6 +225,15 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
           }
           if (viewLink && slugs[index]) {
             viewLink.setAttribute('href', '/exhibitions/' + slugs[index]);
+          }
+          // Position only — the sighted swap already shows the card itself;
+          // this is what a screen reader gets instead of the whole thing
+          // being re-read. Set on every show(), not just after the first
+          // click, so pressing "Next" on item 1 of 1 disabled-arrow visits
+          // never applies (that path returns above) and every real cycle
+          // always has a current announcement.
+          if (status) {
+            status.textContent = 'Exhibition ' + (index + 1) + ' of ' + details.length;
           }
         }
 

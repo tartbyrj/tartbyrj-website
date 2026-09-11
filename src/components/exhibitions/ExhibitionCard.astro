@@ -92,7 +92,7 @@ const coverUrl = exhibition.coverImage
 
     {exhibition.tagline && <p class="ex-card-tagline">{exhibition.tagline}</p>}
 
-    <ExhibitionMeta dates={dates} venue={venue} class="ex-card-meta" />
+    <ExhibitionMeta dates={dates} venue={venue} />
 
     {exhibition.excerpt && <p class="ex-card-excerpt">{exhibition.excerpt}</p>}
 
@@ -165,8 +165,25 @@ const coverUrl = exhibition.coverImage
     color: var(--text-secondary);
   }
 
+  /* display:flex + gap, not per-element margin-bottom: spacing between
+     these children is this element's own layout, owned entirely by this
+     file rather than reaching into a child's internals (see the note on
+     ExhibitionMeta below — that's the trap this replaces). 16px is the base
+     rhythm, matching the meta block's own spacing. A couple of children
+     below carry a small compensating margin, derived from measuring the
+     ORIGINAL rendered gaps in the browser (badge→title and title→tagline
+     were 10px, not 16 — a tighter rhythm around the small-caps badge line),
+     not assumed. Re-measure with getBoundingClientRect() before changing
+     any of these numbers, not by reading the CSS. */
+  .ex-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .ex-card-badge {
-    margin: 0 0 10px;
+    /* -6px nets 10px before the title against the 16px base gap. */
+    margin: 0 0 -6px;
     font-size: 10.5px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -182,7 +199,12 @@ const coverUrl = exhibition.coverImage
   }
 
   .ex-card-title {
-    margin: 0 0 10px;
+    /* Same -6px compensation as the badge, for the same reason: this gap
+       was 10px in both the tagline-present and tagline-absent case (title's
+       own original margin-bottom governed it either way), so a flat
+       compensation here — not on whichever element happens to follow —
+       is what keeps both cases correct. */
+    margin: 0 0 -6px;
     font-family: var(--font-serif);
     font-weight: 300;
     font-size: clamp(24px, 4cqw, 34px);
@@ -216,27 +238,32 @@ const coverUrl = exhibition.coverImage
   }
 
   .ex-card-tagline {
-    margin: 0 0 16px;
+    /* No margin — the 16px base gap alone already matches the original
+       tagline→meta spacing. Nothing to compensate. */
+    margin: 0;
     font-family: var(--font-serif);
     font-style: italic;
     font-size: clamp(15px, 2cqw, 18px);
     color: var(--text-secondary);
   }
 
-  /* :global() on the child half is required, not stylistic. Astro scopes a
-     style block by stamping this component's own cid onto the elements in
-     THIS template — but `class="ex-card-meta"` is passed into
-     <ExhibitionMeta>, so it lands on an element carrying ExhibitionMeta's
-     cid instead. A plain `.ex-card-meta` compiles to
-     `.ex-card-meta[data-astro-cid-<card>]`, which never matches, and the
-     margin silently does nothing. The `.ex-card-body` half keeps this
-     scoped to cards rather than leaking site-wide. */
-  .ex-card-body :global(.ex-card-meta) {
-    margin-bottom: 16px;
-  }
+  /* No rule here for ExhibitionMeta's own spacing — see .ex-card-body above.
+     A previous version tried .ex-card-body :global(.ex-card-meta) {
+     margin-bottom: 16px }, passing a class into <ExhibitionMeta> for the
+     parent to target. It compiled to
+     .ex-card-meta[data-astro-cid-<THIS FILE>], which never matched the
+     element (that element carries ExhibitionMeta's own cid), so the margin
+     silently did nothing — CLAUDE.md's "Astro scoped-class trap" entry.
+     :global() would have "fixed" it by matching on bare class name, but
+     that's reaching into a child's internals from outside, which breaks the
+     moment ExhibitionMeta renames its own class. flex + gap on the parent
+     doesn't select into the child at all, so there's nothing to break. */
 
   .ex-card-excerpt {
-    margin: 0 0 18px;
+    /* +2px nets 18px before the CTA against the 16px base gap. Not verified
+       live — today's only published exhibition has no excerpt, so this pair
+       is unmeasured; the value is derived by the same math as the others. */
+    margin: 0 0 2px;
     max-width: 52ch;
     font-size: 14px;
     line-height: 1.75;
