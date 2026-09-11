@@ -563,21 +563,18 @@ const tiles = recentWorks.map((artwork, i) => {
     height: 100vh;
     width: 100%;
     overflow: hidden;
-    /* Soft studio-wall gradient behind the plate, replacing the old photo
-       backdrop. That photo had to line up with the plate's screen position,
-       which only held at its native 1366×768 crop — any wider viewport
-       stretched it via background-size: cover and the "empty frame on the
-       wall" drifted away from .hero-frame. A gradient has no alignment to
-       break: it reads correctly at every viewport width. Built entirely
-       from theme tokens (color-mix against --accent) so it re-tints
-       automatically for the dark variant — no separate dark-mode rule
-       needed here. */
-    background-image: radial-gradient(
-        120% 85% at 50% 28%,
-        var(--bg-secondary) 0%,
-        var(--bg-primary) 55%,
-        color-mix(in srgb, var(--accent) 10%, var(--bg-primary)) 100%
-      );
+    /* Flat --bg-primary, replacing the old photo backdrop. That photo had
+       to line up with the plate's screen position, which only held at its
+       native 1366×768 crop — any wider viewport stretched it via
+       background-size: cover and the "empty frame on the wall" drifted
+       away from .hero-frame. A gradient was tried next but rejected: §17's
+       locked background rule keeps every artwork-bearing section on flat
+       --bg-primary, with The Artist section as the page's one deliberate
+       tonal break (--bg-elevated) — a tinted hero backdrop reintroduces
+       exactly the alternating-background pattern that rule exists to
+       prevent. Flat --bg-primary is both correct per that rule and, unlike
+       the photo, has no alignment to break at any viewport width. */
+    background-color: var(--bg-primary);
   }
 
   .hero-track.is-animated .hero {
