@@ -77,3 +77,22 @@ export function exhibitionEventJsonLd(
 
   return ld;
 }
+
+/**
+ * Serialises any JSON-LD object for a `<script type="application/ld+json">`
+ * emitted via `set:html`. A raw `JSON.stringify()` ships whatever `<`, `>`
+ * and `&` a CMS-authored field (title, venue, address...) happens to
+ * contain, verbatim. The browser's HTML parser scans `<script>` content for
+ * `</script` regardless of JSON string-quoting context, so a field
+ * containing "</script>" breaks out of the tag into the surrounding markup.
+ * `\uXXXX` escapes are valid inside a JSON string and never occur as JSON
+ * structural syntax outside one, so a global replace is safe everywhere in
+ * the output. Both exhibitions pages must use this, not `JSON.stringify`
+ * directly — see index.astro and [slug].astro.
+ */
+export function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}

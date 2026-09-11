@@ -14,6 +14,16 @@ const ExhibitionImageSchema = z.object({
     .nullish(),
 });
 
+// gallery[] only — coverImage and artworks[].image don't carry a per-image
+// `alt` field in Studio (coverImage uses the exhibition-level `altText`
+// instead). Optional: RJ hasn't authored any gallery content yet, and a
+// required field would fail every existing and future document that skips
+// it. The detail page falls back to the ordinal "Installation view N of M"
+// text when this is unset.
+const GalleryImageSchema = ExhibitionImageSchema.extend({
+  alt: z.string().nullish(),
+});
+
 export const ExhibitionSchema = z.object({
   title: z.string(),
   slug: z.object({ current: z.string() }),
@@ -74,9 +84,19 @@ export const ExhibitionSchema = z.object({
   // Same per-item `.catch(null)` reasoning as storyPages on CollectionSchema:
   // Studio inserts a bare `{_key,_type:'image'}` the instant an editor clicks
   // "Add item" before uploading, which fails `asset`'s required check.
-  gallery: z.array(ExhibitionImageSchema.nullish().catch(null)).nullish(),
+  gallery: z.array(GalleryImageSchema.nullish().catch(null)).nullish(),
   link: z.string().nullish(),
-  seo: z.any().nullish(),
+  // Matches src/sanity/schemas/exhibition.ts's `seo` object field exactly:
+  // metaTitle (string), metaDescription (text — still a string over the
+  // wire), ogImage (image, same asset/hotspot/crop shape as every other
+  // image on this schema, though Studio doesn't enable hotspot for it).
+  seo: z
+    .object({
+      metaTitle: z.string().nullish(),
+      metaDescription: z.string().nullish(),
+      ogImage: ExhibitionImageSchema.nullish(),
+    })
+    .nullish(),
 });
 
 export type Exhibition = z.infer<typeof ExhibitionSchema>;

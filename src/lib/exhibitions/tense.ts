@@ -8,6 +8,8 @@
  * live countdown.
  */
 
+import { isValidISODate } from './date-validation.ts';
+
 export type Tense = 'upcoming' | 'current' | 'past';
 
 interface DatedExhibition {
@@ -29,6 +31,12 @@ function todayISODate(today: Date): string {
 export function getTense(exhibition: DatedExhibition, today: Date = new Date()): Tense {
   const { startDate, endDate } = exhibition;
   if (!startDate || !endDate) return 'past';
+  // A malformed date (bad shape, or out-of-range values Date.UTC would
+  // silently roll over) must not reach the raw string comparison below:
+  // e.g. 'not-a-date' sorts after any real ISO date and would otherwise be
+  // misclassified 'upcoming'. Matches the documented fallback for
+  // unparseable dates — the same 'past' as a missing date.
+  if (!isValidISODate(startDate) || !isValidISODate(endDate)) return 'past';
 
   const todayDate = todayISODate(today);
   if (startDate > todayDate) return 'upcoming';

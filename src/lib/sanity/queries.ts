@@ -224,6 +224,6 @@ export const EXHIBITION_BY_SLUG_QUERY = `
   statement,pullQuote,link,seo,
   "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop}),
   artworks[]->{_id,title,slug,image,year,medium},
-  gallery[]{asset,hotspot,crop}
+  gallery[]{asset,hotspot,crop,alt}
 }
 `;

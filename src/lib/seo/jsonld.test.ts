@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { exhibitionEventJsonLd } from './jsonld.ts';
+import { exhibitionEventJsonLd, serializeJsonLd } from './jsonld.ts';
 
 const full = {
   title: 'The River Remembers Its Names',
@@ -93,4 +93,16 @@ test('never emits an empty string for any property', () => {
     assert.notEqual(value, '', `${key} was an empty string`);
     assert.notEqual(value, null, `${key} was null`);
   }
+});
+
+test('serializeJsonLd escapes </script> so a CMS field cannot break out of the tag', () => {
+  const out = serializeJsonLd({ name: '</script><script>alert(1)</script>' });
+  assert.ok(!out.includes('</script>'), 'literal </script> must not appear in the output');
+  assert.ok(out.includes('\\u003c/script\\u003e'), 'the tag should survive as an escaped sequence');
+});
+
+test('serializeJsonLd still round-trips to the same data via JSON.parse', () => {
+  const data = { name: 'A & B <C>', url: 'https://example.com/a&b' };
+  const parsed = JSON.parse(serializeJsonLd(data));
+  assert.deepEqual(parsed, data);
 });

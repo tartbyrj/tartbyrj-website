@@ -34,6 +34,23 @@ test('returns past when endDate is missing', () => {
   assert.equal(tense, 'past');
 });
 
+test('returns past when startDate is malformed, never misclassified upcoming', () => {
+  // A raw string compare ('not-a-date' > any real ISO date) would otherwise
+  // sort this after today's date and call it 'upcoming'.
+  const tense = getTense({ startDate: 'not-a-date', endDate: '2026-07-01' }, TODAY);
+  assert.equal(tense, 'past');
+});
+
+test('returns past when endDate is malformed', () => {
+  const tense = getTense({ startDate: '2026-06-01', endDate: 'not-a-date' }, TODAY);
+  assert.equal(tense, 'past');
+});
+
+test('returns past when startDate has an out-of-range month', () => {
+  const tense = getTense({ startDate: '2026-13-01', endDate: '2026-07-01' }, TODAY);
+  assert.equal(tense, 'past');
+});
+
 test('countByTense tallies a mixed list without recomputing per-tense filters', () => {
   const exhibitions = [
     { startDate: '2026-07-01', endDate: '2026-07-05' }, // upcoming

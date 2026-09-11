@@ -170,6 +170,15 @@ export default defineType({
           options: {
             hotspot: true,
           },
+          fields: [
+            defineField({
+              name: 'alt',
+              title: 'Alt Text',
+              description:
+                'Optional — describe what the shot shows. Falls back to "Installation view N of M — <title>" when left blank, which names the shot but not its content.',
+              type: 'string',
+            }),
+          ],
         },
       ],
     }),

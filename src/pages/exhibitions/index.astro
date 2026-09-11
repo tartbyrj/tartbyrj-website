@@ -5,6 +5,7 @@ import Layout from '../../layouts/Layout.astro';
 import ExhibitionCard from '../../components/exhibitions/ExhibitionCard.astro';
 import { getAllExhibitions } from '../../lib/exhibitions/data';
 import { countByTense, type Tense } from '../../lib/exhibitions/tense';
+import { serializeJsonLd } from '../../lib/seo/jsonld';
 
 const exhibitions = await getAllExhibitions();
 
@@ -40,7 +41,7 @@ const jsonLd = {
   title="Exhibitions"
   description="Exhibitions, art fairs and mural commissions by Rupjyoti Baruah — T.Art by RJ."
 >
-  <script type="application/ld+json" slot="jsonld" is:inline set:html={JSON.stringify(jsonLd)} />
+  <script type="application/ld+json" slot="jsonld" is:inline set:html={serializeJsonLd(jsonLd)} />
 
   {/* Flat --bg-primary, deliberately. The locked design shows a painted
       texture bleeding in from the right here; §3 defers it because §18

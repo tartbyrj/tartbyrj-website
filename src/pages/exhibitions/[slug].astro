@@ -9,7 +9,7 @@ import { getAllExhibitions } from '../../lib/exhibitions/data';
 import { getNeighbours } from '../../lib/exhibitions/neighbours';
 import { formatDateRange } from '../../lib/exhibitions/format';
 import { getTense, type Tense } from '../../lib/exhibitions/tense';
-import { exhibitionEventJsonLd } from '../../lib/seo/jsonld';
+import { exhibitionEventJsonLd, serializeJsonLd } from '../../lib/seo/jsonld';
 import { EXHIBITION_BY_SLUG_QUERY } from '../../lib/sanity/queries';
 import { ExhibitionSchema, type Exhibition } from '../../types/exhibition';
 
@@ -145,11 +145,9 @@ const showVisiting = visitingRows.length > 0 || hasLinks;
 
 const hasBody = Boolean(exhibition.statement || exhibition.pullQuote);
 
-// §7 — seo object when populated, otherwise derived.
-const seo = exhibition.seo as
-  | { metaTitle?: string | null; metaDescription?: string | null; ogImage?: unknown }
-  | null
-  | undefined;
+// §7 — seo object when populated, otherwise derived. Typed for real by
+// ExhibitionSchema now (src/types/exhibition.ts) — no cast needed.
+const seo = exhibition.seo;
 
 const metaTitle = seo?.metaTitle ?? exhibition.title;
 const metaDescription =
@@ -158,7 +156,17 @@ const metaDescription =
     .filter(Boolean)
     .join(' · ');
 
-const ogImage = coverUrl ?? undefined;
+// §7 — authored seo.ogImage wins when set (an editor's deliberate choice),
+// then the exhibition's own cover. Previously `coverUrl ?? undefined`,
+// which never read seo.ogImage at all — an editor-set OG image was silently
+// ignored. No site-wide default image exists anywhere on this site (every
+// other page already omits og:image entirely when it has nothing to show —
+// see Layout.astro), so a cover-less, seo.ogImage-less exhibition still
+// gets no og:image, same as everywhere else.
+const seoOgImageUrl = seo?.ogImage
+  ? urlFor(seo.ogImage).width(1200).format('webp').quality(85).url()
+  : null;
+const ogImage = seoOgImageUrl ?? coverUrl ?? undefined;
 
 // Derived from Astro.url.pathname, NOT hand-built from the slug. Under this
 // project's directory build format every route's real URL ends in a slash
@@ -184,7 +192,7 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
       slot + set:html pattern /works/[slug] already uses — the codebase's
       own precedent for the rule CLAUDE.md documents as <Fragment set:html>;
       both avoid the bare {JSON.stringify(x)} that ships literal text. */}
-  <script type="application/ld+json" slot="jsonld" is:inline set:html={JSON.stringify(jsonLd)} />
+  <script type="application/ld+json" slot="jsonld" is:inline set:html={serializeJsonLd(jsonLd)} />
 
   <div class="page">
     <div class="page-head">
@@ -297,7 +305,7 @@ const jsonLd = exhibitionEventJsonLd(exhibition, {
                 src={urlFor(image).width(1200).fit('max').format('webp').quality(85).url()}
                 srcset={plateSrcSet(image)}
                 sizes={GALLERY_SIZES}
-                alt={`Installation view ${i + 1} of ${gallery.length} — ${exhibition.title}`}
+                alt={image.alt ?? `Installation view ${i + 1} of ${gallery.length} — ${exhibition.title}`}
                 width="1600"
                 height="1067"
                 loading="lazy"

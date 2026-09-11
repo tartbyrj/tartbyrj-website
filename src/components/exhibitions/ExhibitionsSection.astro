@@ -101,6 +101,7 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
                 class:list={['plate', i === 0 && 'is-active']}
                 data-ex-plate
                 data-ex-index={i}
+                aria-hidden={i === 0 ? 'false' : 'true'}
               >
                 {exhibition.coverImage ? (
                   <img
@@ -141,6 +142,7 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
               data-ex-detail
               data-ex-index={i}
               data-ex-slug={exhibition.slug.current}
+              aria-hidden={i === 0 ? 'false' : 'true'}
             >
               <p class="ex-kicker">{isFallback ? `Most recent ${exhibition.type ?? ''}`.trim() : exhibition.type}</p>
               <h2 class="ex-title">{exhibition.title}</h2>
@@ -219,9 +221,11 @@ const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverIm
           index = (nextIndex + details.length) % details.length;
           for (var p = 0; p < plates.length; p++) {
             plates[p].classList.toggle('is-active', p === index);
+            plates[p].setAttribute('aria-hidden', p === index ? 'false' : 'true');
           }
           for (var d = 0; d < details.length; d++) {
             details[d].classList.toggle('is-active', d === index);
+            details[d].setAttribute('aria-hidden', d === index ? 'false' : 'true');
           }
           if (viewLink && slugs[index]) {
             viewLink.setAttribute('href', '/exhibitions/' + slugs[index]);
