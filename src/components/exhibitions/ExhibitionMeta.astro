@@ -1,0 +1,108 @@
+---
+// The icon + date and icon + venue lines, shared by the list card and the
+// detail page (PRD 3 §2).
+//
+// Icons are hand-written inline SVG, matching the `socialIcons` registry
+// next to .footer-social in Layout.astro — the established in-repo pattern
+// for the handful of glyphs this site uses. PRD §4 called for Astro Icon
+// (`ri:calendar-line` / `ri:map-pin-line`) on the stated basis that it was
+// "already in the stack"; it is not — there is no astro-icon dependency, no
+// @iconify-json set, no integration in astro.config.mjs, and the theme
+// toggle it cites as precedent uses Unicode glyphs (☽/☀), not an icon set.
+// Since §11 forbids new npm dependencies, inline SVG is what satisfies both
+// constraints. Decision confirmed with RJ before implementing.
+//
+// aria-hidden + focusable="false": these are decorative. The adjacent text
+// says everything, so announcing them would only add noise — and without
+// focusable="false" IE/older-Edge put bare <svg> in the tab order.
+interface Props {
+  dates?: string | null;
+  venue?: string | null;
+  /** Extra class on the wrapper, so callers can adjust spacing/size. */
+  class?: string;
+}
+
+const { dates, venue, class: className } = Astro.props;
+---
+
+{(dates || venue) && (
+  <div class:list={['ex-meta', className]}>
+    {dates && (
+      <p class="ex-meta-row">
+        <svg class="ex-meta-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="16"
+            rx="2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+          />
+          <path d="M3 10h18" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path
+            d="M8 3v4M16 3v4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+        </svg>
+        <span class="ex-meta-text ex-meta-dates">{dates}</span>
+      </p>
+    )}
+
+    {venue && (
+      <p class="ex-meta-row">
+        <svg class="ex-meta-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path
+            d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+        </svg>
+        <span class="ex-meta-text">{venue}</span>
+      </p>
+    )}
+  </div>
+)}
+
+<style>
+  .ex-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ex-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .ex-meta-icon {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--text-muted);
+  }
+
+  .ex-meta-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  /* tabular-nums belongs to the component, not the formatter (PRD 1 §10.3):
+     a date range is the one place on this site where digits sit in a column
+     across stacked cards, and proportional figures make them look ragged. */
+  .ex-meta-dates {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+</style>

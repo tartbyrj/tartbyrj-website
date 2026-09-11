@@ -4,6 +4,7 @@ import { Image } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
 import ThemeToggle from '../components/ui/ThemeToggle.astro';
 import { siteContact, SOCIALS, type SocialLink } from '../lib/site';
+import { getAllExhibitions } from '../lib/exhibitions/data';
 
 export interface Props {
   title: string;
@@ -16,6 +17,13 @@ export interface Props {
   // the plain opaque bar — is the default and every other page gets it by
   // omitting the prop, not by passing it explicitly.
   navMode?: 'glass' | 'solid';
+  /**
+   * Canonical URL for this page. Defaults to the page's own path resolved
+   * against `site` in astro.config.mjs, which is right for every route the
+   * site has — pass it explicitly only where one URL should be canonical for
+   * several paths.
+   */
+  canonical?: string | URL;
 }
 
 const {
@@ -23,7 +31,14 @@ const {
   description = 'Original paintings and fine art by Rupjyoti Baruah — T.Art by RJ.',
   ogImage,
   navMode = 'solid',
+  canonical,
 } = Astro.props;
+
+// Astro.site is undefined if `site` is ever removed from the config, and
+// `new URL(path, undefined)` throws — which would take down every page on
+// the site rather than just dropping a meta tag. Guarded so the canonical
+// link degrades to absent instead.
+const canonicalUrl = canonical ?? (Astro.site ? new URL(Astro.url.pathname, Astro.site) : null);
 
 const fontFiles = [
   'CormorantGaramond-Light',
@@ -35,13 +50,35 @@ const fontFiles = [
   'Jost-Medium',
 ];
 
+// Exhibitions is conditional: a nav link to an empty page is worse than no
+// link, so the item is generated only once at least one exhibition exists
+// (PRD 3 §10). getAllExhibitions() is memoized at module scope in
+// production, so this is one fetch for the whole build no matter how many
+// pages render the nav — see src/lib/exhibitions/data.ts.
+const hasExhibitions = (await getAllExhibitions()).length > 0;
+
 const navLinks = [
   { label: 'Home', href: '/' },
   { label: 'Collections', href: '/collections' },
   { label: 'Works', href: '/works' },
+  ...(hasExhibitions ? [{ label: 'Exhibitions', href: '/exhibitions' }] : []),
   { label: 'Artist', href: '/artist' },
   { label: 'Contact', href: '/contact' },
 ];
+
+// aria-current marks the section you are in — for /exhibitions this has to
+// cover /exhibitions/<slug> too, hence the prefix test rather than equality.
+// '/' is exact, or it would match every path on the site.
+//
+// Semantics only: no nav item on this site carries a visual active state
+// today, and inventing one here would restyle the nav on every existing
+// page, which is outside this change. Screen readers announce it; sighted
+// users see the nav exactly as before.
+const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
+function isCurrent(href: string): boolean {
+  if (href === '/') return currentPath === '/';
+  return currentPath === href || currentPath.startsWith(`${href}/`);
+}
 
 // Inner markup for each .footer-social glyph, keyed by SocialLink['icon'].
 // Adding a network is one entry in SOCIALS (src/lib/site.ts) plus one entry
@@ -108,6 +145,8 @@ const copyrightYear = new Date().getFullYear();
     <meta name="description" content={description} />
     <title>{title} — T.Art by RJ</title>
 
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl.toString()} />}
+
     {fontFiles.map((file) => (
       <link rel="preload" href={`/fonts/${file}.woff2`} as="font" type="font/woff2" crossorigin />
     ))}
@@ -139,7 +178,9 @@ const copyrightYear = new Date().getFullYear();
       <div class="nav-right">
         <div class="nav-links">
           {navLinks.map((link) => (
-            <a href={link.href}>{link.label}</a>
+            <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+              {link.label}
+            </a>
           ))}
         </div>
         <ThemeToggle />
@@ -154,7 +195,9 @@ const copyrightYear = new Date().getFullYear();
     <div id="mobile-menu" class="mobile-menu">
       <button id="menu-close" class="menu-close" aria-label="Close menu">✕</button>
       {navLinks.map((link) => (
-        <a href={link.href}>{link.label}</a>
+        <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+          {link.label}
+        </a>
       ))}
     </div>
 

@@ -289,6 +289,22 @@ urlFor(image).width(1200).format('webp').quality(85).url()
   the underline away from the text. `.available-cta` in `artist.astro` is
   the reference implementation; verify with `elementFromPoint` at offsets
   from the visible box's center, not just by reading the CSS.
+- **An element cannot respond to its own container query.** `container-type`
+  goes on a *wrapper*; the `@container` rule targets an element *inside* it.
+  Putting both on the same element fails **silently** — no console error, no
+  `astro check` complaint — and leaves the layout stuck in its single-column
+  state at full desktop width. This was hit twice while building the
+  exhibitions feature (`ExhibitionCard.astro`, and the detail page's `.body`);
+  both are now wrapper + inner-grid pairs. `ExhibitionsSection.astro`'s
+  `.wrap` → `.feature` is the correct shape to copy.
+- **Container-query thresholds are measured against the component's own
+  available width, not the viewport** — i.e. after page padding and every
+  wrapper inset. The exhibitions breakpoint is **520px of CONTAINER width**,
+  deliberately low. An earlier 860px value collapsed to the stacked mobile
+  layout on real laptops, because the container never reached 860 at any
+  realistic viewport. Before changing any threshold, measure the actual
+  rendered container width at 1440, 1024 and 768 viewports — do not reason
+  from the viewport number.
 
 ### Scroll reveal
 ```html

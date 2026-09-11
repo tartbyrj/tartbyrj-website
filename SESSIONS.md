@@ -6,6 +6,138 @@
 
 ---
 
+## Session: 2026-09-10 — PRD 3: `/exhibitions` list + detail pages, code-review fixes, `openingReception` → string
+
+> **RESUMING? NOTHING IS COMMITTED.** PRD 1 (foundation) and PRD 2 (homepage
+> section) are committed — `09244dc` and `17e1770`. Everything below is
+> working-tree only. `npm test` 28/28, `astro check` 0/0/0, build clean at 34
+> pages. One exhibition ("houston", a past show) is now published in Sanity,
+> which is what makes the nav item and homepage section render at all.
+
+### What was built (PRD 3)
+
+**Added:**
+- `src/pages/exhibitions/index.astro` — hero band (flat `--bg-primary`; the
+  locked design's painted texture is deliberately deferred, see PRD 3 §3),
+  client-side filter tabs with counts, card list, closing strip,
+  `CollectionPage` JSON-LD.
+- `src/pages/exhibitions/[slug].astro` — back link, head, cover, statement +
+  "Visiting" panel, gallery, works on view, prev/next, `ExhibitionEvent`
+  JSON-LD.
+- `src/components/exhibitions/ExhibitionCard.astro` — one list row.
+- `src/components/exhibitions/ExhibitionMeta.astro` — the icon + date and
+  icon + venue rows, reused on both pages.
+- `src/lib/exhibitions/neighbours.ts` + `.test.ts` — prev/next derivation.
+- `src/lib/seo/jsonld.ts` + `.test.ts` — `ExhibitionEvent` generator.
+
+**Modified:** `astro.config.mjs` (added `site`), `Layout.astro` (canonical
+prop, conditional Exhibitions nav item, `aria-current`), `package.json`
+(`"test": "node --experimental-strip-types --test"` — 28 assertions existed
+with no runner wired up).
+
+**Icons are hand-written inline SVG**, matching Layout's existing
+`socialIcons` registry. PRD 3 §4 specified Astro Icon "already in the stack"
+— it is not installed, was never installed, and the theme toggle it cites as
+precedent uses Unicode glyphs. §11 forbids new dependencies, so inline SVG
+satisfies both. Confirmed with RJ before building.
+
+### `n === 2` prev/next — the bug §20 warned would hit immediately
+
+The naive `(i-1+n)%n` / `(i+1)%n` arithmetic resolves to the **same index**
+when `n === 2`, so both "Previous" and "Next" point at one identical
+document. That exact bug shipped live on `/collections/[slug]` once already.
+Extracted into `getNeighbours()` as a pure, unit-tested function with three
+cases — `n<=1` both null (section skipped, never a self-link), `n===2` **no
+wrap** (index 0 gets next only, index 1 gets prev only), `n>=3` wraps.
+Verified in built HTML with two fixture exhibitions: page 1 rendered only
+Next, page 2 only Previous, neither self-linking. One test asserts the
+invariant directly across every list length rather than case by case.
+
+### Two container-query bugs — found in my own code, both silent
+
+**An element cannot respond to its own container query.** I put
+`container-type: inline-size` and the matching `@container` rule on the *same*
+element, twice — `.ex-card` and the detail page's `.body`. Containment
+establishes a context for **descendants**, so the rule never matched and both
+layouts sat stuck in single-column at full desktop width. No console error,
+no `astro check` complaint. Fixed by splitting each into wrapper + inner
+grid. Measured after: card container 1328px @1440, 942px @1024, 706px @768 →
+all two-column; 452px → stacked, correct against the 520px threshold. Rule is
+now recorded in CLAUDE.md under CSS rules, along with the reminder that
+thresholds are measured against *container* width, not viewport (an earlier
+860px value collapsed on real laptops).
+
+### `openingReception`: `datetime` → `string`
+
+Sanity's datetime widget resolves input against the **editor's** browser
+timezone. RJ authors from both Dubai and Assam, so a Dubai show entered from
+Assam stores an instant 1.5 hours off, and no output formatting recovers the
+intended wall-clock time — a companion timezone field would just produce a
+correctly-formatted wrong answer, which is worse because it looks
+trustworthy. The value is display-only: it is **not** in the
+`ExhibitionEvent` JSON-LD (that uses `startDate` / `endDate`) and does not
+need to be machine-readable.
+
+Now a plain string rendered verbatim, mirroring `hours` — keep the two
+consistent. Changed while **zero** exhibition documents were published, so it
+cost no migration; it would cost one later. Touched
+`src/sanity/schemas/exhibition.ts` (type + Studio description),
+`src/types/exhibition.ts` (comment only — it was already
+`z.string().nullish()`, since GROQ returned the datetime as an ISO string),
+and `[slug].astro` (deleted the Intl/UTC formatting). `queries.ts` only
+projects the field name and needed no change. The Visiting-panel row stays
+conditional: null still means no row.
+
+### Code-review round — 9 findings, 8 fixed
+
+Run by the user on the diff. Verified each against real build output before
+touching anything. The two that mattered most were both mine and both
+invisible to `astro check`:
+
+- **Scoped-style margins that never applied.** Passing `class="ex-card-meta"`
+  into `<ExhibitionMeta>` lands that class on an element carrying
+  *ExhibitionMeta's* `data-astro-cid`, but the rule compiled against the
+  *parent's* — `.ex-card-meta[data-astro-cid-fiq27e6o]`, which matched
+  nothing. Computed `margin-bottom` was `0px`; now `16px` (and `22px` for
+  `.head-meta`). Fixed with `.ex-card-body :global(.ex-card-meta)` so it
+  works without leaking site-wide. **This is a general trap: any class passed
+  into a child component needs `:global()` on the child half.**
+- **Canonical pointed at a redirect.** I hand-built it from the slug, giving
+  `/exhibitions/houston` — the only canonical on the site without a trailing
+  slash, while every other route emits one under the directory build format.
+  It fed the JSON-LD `url` too. Now derived from `Astro.url.pathname` like
+  every other page, with the same `Astro.site` guard Layout uses.
+
+Also fixed: mixed cover/no-cover inventory rendered an empty plate in the
+homepage carousel (now falls back to the pull-quote panel; `showImageColumn`
+is `.some()`, not item 0); gallery/cover shipped 1600px with no `srcset`;
+carousel swapped content with no `aria-live`; the last-card border keyed off
+`:last-child`, which `display:none` filtering ignores.
+
+**Narrowed one finding rather than taking it as written:** the suggested
+last-card fix would have keyed everything off JS. Kept `:last-child` as the
+no-JS baseline and added `.is-last-visible` only for the filtered case —
+otherwise the borderless-last-card treatment breaks entirely with JS off.
+
+### Not done / open
+
+- **ARCHITECTURE.md §22 and §23 do not exist.** All three PRDs cite them as
+  locked-design records ("§22 (homepage section, locked)", "§23 (exhibitions
+  pages, locked)"); the file ends at §21. The exhibitions decisions therefore
+  have no home in ARCHITECTURE.md, and this session's doc updates were
+  scoped to CLAUDE.md, PRD 1 and this log by explicit decision. Creating
+  §22/§23 is still outstanding.
+- Multi-card filtering border and the mixed-cover carousel are verified by
+  code/CSS inspection only — one published exhibition isn't enough to
+  exercise either live.
+- Lighthouse, Google Rich Results, and real Studio round-trip all need the
+  published site.
+- Nav active state is semantic only (`aria-current="page"`); no nav item on
+  the site has a visual active style, and adding one would restyle every
+  page.
+
+---
+
 ## Session: 2026-09-02 (cont'd) — `/impeccable audit` of /artist, sitewide detector sweep, deck alt-text pipeline
 
 > **RESUMING? START HERE. FIX QUEUE IS COMPLETE (8/8) — then a `/code-review

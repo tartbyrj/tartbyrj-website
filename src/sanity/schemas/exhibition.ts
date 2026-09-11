@@ -108,10 +108,23 @@ export default defineType({
       type: 'text',
       rows: 3,
     }),
+    // string, NOT datetime — deliberate, and not an oversight to "correct".
+    // Sanity's datetime widget interprets what the editor types in the
+    // EDITOR'S OWN browser timezone. RJ works from both Dubai and Assam, so
+    // a Dubai show entered from Assam stores an instant 1.5 hours off, and
+    // no amount of output formatting recovers the intended wall-clock time.
+    // Adding a timezone field would only produce a correctly-formatted wrong
+    // answer, which is worse than plain text because it looks trustworthy.
+    // This value is display-only: it is not in the ExhibitionEvent JSON-LD
+    // (that uses the exhibition's own startDate/endDate) and does not need
+    // to be machine-readable. Mirrors `hours` below, which is a plain string
+    // for exactly the same reason — keep the two consistent.
     defineField({
       name: 'openingReception',
       title: 'Opening Reception',
-      type: 'datetime',
+      description:
+        "Opening night, exactly as it should appear on the page — e.g. 'Friday 13 November, 6:00 – 9:00 pm'. Include the city's local time; this text renders verbatim.",
+      type: 'string',
     }),
     defineField({
       name: 'hours',

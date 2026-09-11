@@ -1,0 +1,265 @@
+---
+// One row on /exhibitions (PRD 3 §4). Image left, text right, collapsing to
+// stacked below a 520px CONTAINER width — the same threshold and the same
+// container-query approach as the homepage section, deliberately, so the two
+// never disagree about where the layout breaks.
+import ExhibitionMeta from './ExhibitionMeta.astro';
+import { urlFor } from '../../lib/sanity/client';
+import { formatDateRange } from '../../lib/exhibitions/format';
+import { getTense, type Tense } from '../../lib/exhibitions/tense';
+import type { Exhibition } from '../../types/exhibition';
+
+interface Props {
+  exhibition: Exhibition;
+}
+
+const { exhibition } = Astro.props;
+
+const tense: Tense = getTense(exhibition);
+const TENSE_LABEL: Record<Tense, string> = {
+  upcoming: 'Upcoming',
+  current: 'Current',
+  past: 'Past',
+};
+
+const dates = exhibition.startDate
+  ? formatDateRange(exhibition.startDate, exhibition.endDate)
+  : null;
+const venue = [exhibition.venue, exhibition.city, exhibition.country].filter(Boolean).join(', ');
+
+// fit('max') so Sanity never upscales past the source (§20 — this cut up to
+// 84% of wasted bytes on the collections pages).
+const coverUrl = exhibition.coverImage
+  ? urlFor(exhibition.coverImage).width(800).fit('max').format('webp').quality(85).url()
+  : null;
+---
+
+<article class="ex-card reveal" data-ex-card data-tense={tense}>
+  {/* The grid lives on this inner element, not on .ex-card itself: .ex-card
+      is what carries `container-type`, and an element cannot respond to its
+      own container query — containment establishes a context for
+      DESCENDANTS. Putting both on one element silently left every card
+      stacked at full desktop width. */}
+  <div class="ex-card-inner">
+  {/* The media column always renders — §4's no-image fallback is required,
+      not optional: a list of cards cannot have one row silently change
+      shape the way the single-item homepage section can (§6 state D). */}
+  <div class="ex-card-media">
+    {coverUrl ? (
+      /* alt="" — the card's own title is adjacent visible text and is the
+         link's accessible name, so a descriptive alt here would make a
+         screen reader announce the exhibition twice (§8). */
+      <img
+        src={coverUrl}
+        alt=""
+        width="800"
+        height="533"
+        loading="lazy"
+        decoding="async"
+      />
+    ) : (
+      /* Bordered panel carrying the pull quote. When pullQuote is also null
+         it renders empty but keeps its border and height — the card's
+         two-column grid needs its first column filled. */
+      <div class="ex-card-fallback">
+        {exhibition.pullQuote && <p class="ex-card-pullquote">{exhibition.pullQuote}</p>}
+      </div>
+    )}
+  </div>
+
+  <div class="ex-card-body">
+    {/* One line doing two jobs: tense from the dates, type from the schema.
+        This is what replaces a stored status field (§4). */}
+    <p class="ex-card-badge">
+      <span class="ex-card-tense">{TENSE_LABEL[tense]}</span>
+      {exhibition.type && (
+        <>
+          <span class="ex-card-badge-sep" aria-hidden="true"> · </span>
+          <span class="ex-card-type">{exhibition.type}</span>
+        </>
+      )}
+    </p>
+
+    {/* The real link, and the only tab stop on the card. Its ::after covers
+        the whole article so the card is clickable everywhere, while the
+        accessible name stays just the title rather than the entire card's
+        text — which is what wrapping everything in one <a> would produce. */}
+    <h3 class="ex-card-title">
+      <a class="ex-card-link" href={`/exhibitions/${exhibition.slug.current}`}>
+        {exhibition.title}
+      </a>
+    </h3>
+
+    {exhibition.tagline && <p class="ex-card-tagline">{exhibition.tagline}</p>}
+
+    <ExhibitionMeta dates={dates} venue={venue} class="ex-card-meta" />
+
+    {exhibition.excerpt && <p class="ex-card-excerpt">{exhibition.excerpt}</p>}
+
+    {/* Visual affordance only. The title link above already goes here, so
+        announcing this too would be a duplicate link in the reader's list. */}
+    <span class="ex-card-cta" aria-hidden="true">View details <span>→</span></span>
+    </div>
+  </div>
+</article>
+
+<style>
+  .ex-card {
+    container-type: inline-size;
+    position: relative;
+    padding-block: clamp(30px, 4vw, 48px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ex-card-inner {
+    display: grid;
+    gap: clamp(20px, 4cqw, 40px);
+  }
+
+  /* Threshold is 520px of CONTAINER width, matching the homepage section
+     exactly (PRD 2 §5) — deliberately low, and not to be raised without
+     measuring the real rendered container width at 1440/1024/768. */
+  @container (min-width: 520px) {
+    .ex-card-inner {
+      grid-template-columns: minmax(200px, 340px) 1fr;
+      align-items: start;
+    }
+  }
+
+  .ex-card-media {
+    aspect-ratio: 3 / 2;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .ex-card-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-slow) var(--ease-out);
+  }
+
+  .ex-card:hover .ex-card-media img {
+    transform: scale(1.02);
+  }
+
+  .ex-card-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 24px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-secondary);
+  }
+
+  .ex-card-pullquote {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(15px, 2.6cqw, 19px);
+    line-height: 1.5;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--text-secondary);
+  }
+
+  .ex-card-badge {
+    margin: 0 0 10px;
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .ex-card-tense {
+    color: var(--accent);
+  }
+
+  .ex-card-badge-sep,
+  .ex-card-type {
+    color: var(--text-muted);
+  }
+
+  .ex-card-title {
+    margin: 0 0 10px;
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(24px, 4cqw, 34px);
+    line-height: 1.1;
+    text-wrap: balance;
+    color: var(--text-primary);
+  }
+
+  .ex-card-link {
+    color: inherit;
+    text-decoration: none;
+    transition: color var(--dur-base) ease;
+  }
+
+  /* Covers the whole card, so the row is clickable anywhere without the
+     link's accessible name swallowing every line of text in it. */
+  .ex-card-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .ex-card-link:hover,
+  .ex-card-link:focus-visible {
+    color: var(--accent);
+  }
+
+  .ex-card-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .ex-card-tagline {
+    margin: 0 0 16px;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(15px, 2cqw, 18px);
+    color: var(--text-secondary);
+  }
+
+  /* :global() on the child half is required, not stylistic. Astro scopes a
+     style block by stamping this component's own cid onto the elements in
+     THIS template — but `class="ex-card-meta"` is passed into
+     <ExhibitionMeta>, so it lands on an element carrying ExhibitionMeta's
+     cid instead. A plain `.ex-card-meta` compiles to
+     `.ex-card-meta[data-astro-cid-<card>]`, which never matches, and the
+     margin silently does nothing. The `.ex-card-body` half keeps this
+     scoped to cards rather than leaking site-wide. */
+  .ex-card-body :global(.ex-card-meta) {
+    margin-bottom: 16px;
+  }
+
+  .ex-card-excerpt {
+    margin: 0 0 18px;
+    max-width: 52ch;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text-secondary);
+  }
+
+  .ex-card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .ex-card:hover .ex-card-cta {
+    opacity: 0.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ex-card-media img {
+      transition-duration: 1ms;
+    }
+  }
+</style>

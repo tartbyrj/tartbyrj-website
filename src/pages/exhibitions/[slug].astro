@@ -1,0 +1,816 @@
+---
+// One exhibition in full (PRD 3 §5). Order and layout are driven by schema
+// fields, never by array position — gallery[0] is not a hero and
+// artworks[0] is not special (§20 documents exactly that failure).
+import Layout from '../../layouts/Layout.astro';
+import ExhibitionMeta from '../../components/exhibitions/ExhibitionMeta.astro';
+import { client, urlFor } from '../../lib/sanity/client';
+import { getAllExhibitions } from '../../lib/exhibitions/data';
+import { getNeighbours } from '../../lib/exhibitions/neighbours';
+import { formatDateRange } from '../../lib/exhibitions/format';
+import { getTense, type Tense } from '../../lib/exhibitions/tense';
+import { exhibitionEventJsonLd } from '../../lib/seo/jsonld';
+import { EXHIBITION_BY_SLUG_QUERY } from '../../lib/sanity/queries';
+import { ExhibitionSchema, type Exhibition } from '../../types/exhibition';
+
+interface Neighbour {
+  title: string;
+  slug: string;
+}
+
+export async function getStaticPaths() {
+  // Neighbours are computed from the same ordered list that generates the
+  // paths, so routes and prev/next links cannot disagree about which
+  // exhibitions exist (§6, §20).
+  const all = await getAllExhibitions();
+  const neighbourList: Neighbour[] = all.map((e) => ({
+    title: e.title,
+    slug: e.slug.current,
+  }));
+
+  return neighbourList.map((entry, i) => ({
+    params: { slug: entry.slug },
+    // getNeighbours handles the three cases — n<=1 none, n===2 NO WRAP,
+    // n>=3 wraps. Extracted and unit-tested (neighbours.test.ts) precisely
+    // because the naive %n arithmetic silently self-links at n===2, which is
+    // a bug that already shipped on /collections/[slug].
+    props: getNeighbours(neighbourList, i),
+  }));
+}
+
+interface Props {
+  prev: Neighbour | null;
+  next: Neighbour | null;
+}
+
+const { prev, next } = Astro.props as Props;
+const { slug } = Astro.params;
+
+const raw = await client.fetch(EXHIBITION_BY_SLUG_QUERY, { slug }).catch((error: unknown) => {
+  console.error(
+    `[sanity] EXHIBITION_BY_SLUG_QUERY (slug=${slug}): fetch failed — ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  );
+  return null;
+});
+
+const result = ExhibitionSchema.safeParse(raw);
+if (!result.success) {
+  return Astro.redirect('/exhibitions');
+}
+const exhibition: Exhibition = result.data;
+
+const tense: Tense = getTense(exhibition);
+const TENSE_LABEL: Record<Tense, string> = {
+  upcoming: 'Upcoming',
+  current: 'Current',
+  past: 'Past',
+};
+
+const dates = exhibition.startDate
+  ? formatDateRange(exhibition.startDate, exhibition.endDate)
+  : null;
+const venueLine = [exhibition.venue, exhibition.city, exhibition.country]
+  .filter(Boolean)
+  .join(', ');
+
+// Rendered verbatim — no Intl, no parsing, no timezone handling. The Studio
+// field is a plain string carrying the city's own local time as RJ typed it
+// ("Friday 13 November, 6:00 – 9:00 pm"). It used to be a `datetime` run
+// through Intl here, which could only ever be wrong: the widget resolves
+// input against the editor's browser timezone, and RJ authors from both
+// Dubai and Assam. See the comment on the field in
+// src/sanity/schemas/exhibition.ts. Same treatment as `hours`.
+const receptionLabel = exhibition.openingReception;
+
+// §8 — cover stands alone, so it needs a real description. altText first;
+// the derived fallback is a sentence, not a bare title, because a title on
+// its own tells a screen-reader user nothing about the picture.
+const coverAlt =
+  exhibition.altText ??
+  [exhibition.title, venueLine].filter(Boolean).join(' — ') ??
+  exhibition.title;
+
+const coverUrl = exhibition.coverImage
+  ? urlFor(exhibition.coverImage).width(1600).fit('max').format('webp').quality(85).url()
+  : null;
+
+const gallery = (exhibition.gallery ?? []).filter(
+  (image): image is NonNullable<typeof image> => image?.asset != null
+);
+
+// One <img> per shot, with the browser picking the width — a gallery of six
+// installation shots was shipping six ~1600px WebPs to a phone rendering
+// them at ~350 CSS px. Matches the widths CLAUDE.md documents (mobile 800 /
+// desktop 1200) with 1600 kept for large screens and 2x. fit('max') so
+// Sanity never upscales past the source (§20).
+const PLATE_WIDTHS = [480, 800, 1200, 1600];
+const GALLERY_SIZES = '(min-width: 760px) min(550px, 46vw), min(1100px, 92vw)';
+const COVER_SIZES = 'min(1100px, 92vw)';
+
+function plateSrcSet(image: { asset: { _ref: string } }): string {
+  return PLATE_WIDTHS.map(
+    (w) => `${urlFor(image).width(w).fit('max').format('webp').quality(85).url()} ${w}w`
+  ).join(', ');
+}
+
+const artworks = (exhibition.artworks ?? []).filter(
+  (artwork): artwork is NonNullable<typeof artwork> & { slug: { current: string } } =>
+    Boolean(artwork?.slug?.current)
+);
+
+// §5.4 — every practical row is conditional, and if none survive the panel
+// itself does not render. Built as data so the "is the panel empty?" test is
+// the same expression that drives the markup, rather than a second list that
+// could drift from it.
+const directionsHref = venueLine
+  ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      [exhibition.venue, exhibition.address, exhibition.city, exhibition.country]
+        .filter(Boolean)
+        .join(', ')
+    )}`
+  : null;
+
+const visitingRows = [
+  { term: 'Dates', value: dates },
+  { term: 'Opening reception', value: receptionLabel },
+  { term: 'Venue', value: venueLine, detail: exhibition.address },
+  { term: 'Hours', value: exhibition.hours },
+  { term: 'Admission', value: exhibition.admission },
+].filter((row) => Boolean(row.value));
+
+const hasLinks = Boolean(exhibition.link || directionsHref);
+const showVisiting = visitingRows.length > 0 || hasLinks;
+
+const hasBody = Boolean(exhibition.statement || exhibition.pullQuote);
+
+// §7 — seo object when populated, otherwise derived.
+const seo = exhibition.seo as
+  | { metaTitle?: string | null; metaDescription?: string | null; ogImage?: unknown }
+  | null
+  | undefined;
+
+const metaTitle = seo?.metaTitle ?? exhibition.title;
+const metaDescription =
+  seo?.metaDescription ??
+  [exhibition.title, [exhibition.venue, exhibition.city].filter(Boolean).join(', '), dates]
+    .filter(Boolean)
+    .join(' · ');
+
+const ogImage = coverUrl ?? undefined;
+
+// Derived from Astro.url.pathname, NOT hand-built from the slug. Under this
+// project's directory build format every route's real URL ends in a slash
+// ("/exhibitions/houston/"), which is what Layout's own canonical emits for
+// every other page on the site. Rebuilding the string by hand produced
+// "/exhibitions/houston" — the one canonical on the site pointing at a URL
+// the host answers with a redirect, and it fed the JSON-LD `url` too.
+// Guarded like Layout.astro's: new URL(path, undefined) throws, and an
+// unguarded call here would turn a missing `site` config into a hard build
+// failure on this route rather than a dropped meta tag.
+const pageUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site).toString() : null;
+
+const jsonLd = exhibitionEventJsonLd(exhibition, {
+  url: pageUrl ?? Astro.url.pathname,
+  imageUrl: coverUrl,
+});
+---
+
+{/* No `canonical` prop — Layout derives it from Astro.url.pathname, which
+    is the same value pageUrl above uses and matches every other route. */}
+<Layout title={metaTitle} description={metaDescription} ogImage={ogImage}>
+  {/* Astro does not interpolate {expr} inside <script>. This is the same
+      slot + set:html pattern /works/[slug] already uses — the codebase's
+      own precedent for the rule CLAUDE.md documents as <Fragment set:html>;
+      both avoid the bare {JSON.stringify(x)} that ships literal text. */}
+  <script type="application/ld+json" slot="jsonld" is:inline set:html={JSON.stringify(jsonLd)} />
+
+  <div class="page">
+    <div class="page-head">
+      {/* Normal document flow, not absolutely positioned — §20. Pill
+          treatment matches .back-link on /collections/[slug] and
+          .detail-back on /works/[slug]. Those two are already separate
+          inline copies of one another; this is a third rather than a shared
+          component, because extracting one would mean editing two shipped
+          pages, which is outside this PRD's scope. */}
+      <a href="/exhibitions" class="back-link">← Back to Exhibitions</a>
+
+      <header class="head">
+        <p class="head-badge">
+          <span class="head-tense">{TENSE_LABEL[tense]}</span>
+          {exhibition.type && (
+            <>
+              <span aria-hidden="true"> · </span>
+              <span class="head-type">{exhibition.type}</span>
+            </>
+          )}
+        </p>
+        <h1 class="head-title">{exhibition.title}</h1>
+        {exhibition.tagline && <p class="head-tagline">{exhibition.tagline}</p>}
+
+        {/* At-a-glance date and venue, the same component the list cards use
+            (§2). It repeats two of the Visiting panel's rows deliberately:
+            the panel is a "plan your visit" reference holding hours,
+            admission, reception and address, while these two facts are what
+            someone needs before deciding to read any further — an exhibition
+            page that makes you hunt for the dates has buried its lede. */}
+        <ExhibitionMeta dates={dates} venue={venueLine} class="head-meta" />
+      </header>
+    </div>
+
+    {coverUrl && (
+      <figure class="cover">
+        <img
+          src={coverUrl}
+          srcset={exhibition.coverImage ? plateSrcSet(exhibition.coverImage) : undefined}
+          sizes={COVER_SIZES}
+          alt={coverAlt}
+          width="1600"
+          height="1067"
+          loading="eager"
+          decoding="async"
+        />
+      </figure>
+    )}
+
+    {(hasBody || showVisiting) && (
+      /* .body-wrap establishes the container; .body is the grid inside it.
+         They cannot be the same element — an element does not respond to its
+         own container query, containment applies to descendants. */
+      <div class="body-wrap">
+      <div class:list={['body', !hasBody && 'body-panel-only']}>
+        {hasBody && (
+          <div class="body-main">
+            {exhibition.statement && <p class="statement">{exhibition.statement}</p>}
+            {exhibition.pullQuote && <blockquote class="pullquote">{exhibition.pullQuote}</blockquote>}
+          </div>
+        )}
+
+        {showVisiting && (
+          <aside class="visiting">
+            <h2 class="visiting-label">Visiting</h2>
+            <dl class="visiting-list">
+              {visitingRows.map((row) => (
+                <div class="visiting-row">
+                  <dt>{row.term}</dt>
+                  <dd>
+                    {row.value}
+                    {row.detail && <span class="visiting-detail">{row.detail}</span>}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            {hasLinks && (
+              <p class="visiting-links">
+                {exhibition.link && (
+                  <a href={exhibition.link} target="_blank" rel="noopener noreferrer">
+                    Venue website ↗
+                  </a>
+                )}
+                {directionsHref && (
+                  <a href={directionsHref} target="_blank" rel="noopener noreferrer">
+                    Directions ↗
+                  </a>
+                )}
+              </p>
+            )}
+          </aside>
+        )}
+      </div>
+      </div>
+    )}
+
+    {gallery.length > 0 && (
+      <section class="gallery">
+        <div class="section-head">
+          <h2 class="section-label">Installation</h2>
+        </div>
+        <div class="gallery-grid">
+          {gallery.map((image, i) => (
+            /* Gallery shots stand alone — no adjacent text describes them,
+               so a real description is required (§8). Position is the only
+               thing derivable here; the exhibition title carries the rest. */
+            <figure class="gallery-plate">
+              <img
+                src={urlFor(image).width(1200).fit('max').format('webp').quality(85).url()}
+                srcset={plateSrcSet(image)}
+                sizes={GALLERY_SIZES}
+                alt={`Installation view ${i + 1} of ${gallery.length} — ${exhibition.title}`}
+                width="1600"
+                height="1067"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {artworks.length > 0 && (
+      <section class="works">
+        <div class="section-head">
+          <h2 class="section-label">Works on View</h2>
+          <a class="section-link" href="/works">View all works</a>
+        </div>
+        <div class="works-grid">
+          {artworks.map((artwork) => (
+            <a href={`/works/${artwork.slug.current}`} class="work-link">
+              {/* alt="" — the link carries the title as visible text below
+                  (§8), same as the collections work card this mirrors. */}
+              <div class="work-thumb">
+                {artwork.image?.asset && (
+                  <img
+                    src={urlFor(artwork.image)
+                      .width(800)
+                      .height(800)
+                      .fit('max')
+                      .format('webp')
+                      .quality(85)
+                      .url()}
+                    alt=""
+                    width="800"
+                    height="800"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
+              </div>
+              <p class="work-title">{artwork.title ?? 'Untitled'}</p>
+              {artwork.year && <p class="work-year">{artwork.year}</p>}
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {/* Either link may be absent, so this is NOT justify-content:
+        space-between — that would collapse a lone "Next" to the left edge.
+        Direction is pinned structurally by .neighbour-next's margin-left. */}
+    {(prev || next) && (
+      <nav class="neighbours" aria-label="Other exhibitions">
+        {prev && (
+          <a href={`/exhibitions/${prev.slug}`} class="neighbour neighbour-prev">
+            <span class="neighbour-label">Previous</span>
+            <span class="neighbour-title">{prev.title}</span>
+          </a>
+        )}
+        {next && (
+          <a href={`/exhibitions/${next.slug}`} class="neighbour neighbour-next">
+            <span class="neighbour-label">Next</span>
+            <span class="neighbour-title">{next.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+  </div>
+
+  <section class="closing">
+    <p class="closing-text">Interested in this work, or in showing it?</p>
+    <a class="closing-link" href="/contact">Get in touch →</a>
+  </section>
+</Layout>
+
+<style>
+  .page {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding-bottom: clamp(60px, 8vw, 100px);
+  }
+
+  .page-head {
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-top: calc(var(--nav-h) + 20px);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    transition: color var(--dur-base) ease, border-color var(--dur-base) ease;
+  }
+
+  .back-link:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .back-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* ─── HEAD ─── */
+  .head {
+    padding-block: clamp(28px, 4vw, 44px) clamp(24px, 3vw, 36px);
+  }
+
+  .head-badge {
+    margin: 0 0 14px;
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .head-tense {
+    color: var(--accent);
+  }
+
+  .head-type {
+    color: var(--text-muted);
+  }
+
+  .head-title {
+    margin: 0;
+    max-width: 20ch;
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(32px, 5vw, 58px);
+    line-height: 1.06;
+    text-wrap: balance;
+    color: var(--text-primary);
+  }
+
+  .head-tagline {
+    margin: 16px 0 0;
+    max-width: 52ch;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(16px, 2vw, 21px);
+    color: var(--text-secondary);
+  }
+
+  /* :global() for the same reason as .ex-card-meta in ExhibitionCard —
+     the class is passed into <ExhibitionMeta>, so it lands on an element
+     carrying that component's cid, not this page's. Scoped under .head so
+     it cannot leak. */
+  .head :global(.head-meta) {
+    margin-top: 22px;
+  }
+
+  /* ─── COVER ─── */
+  .cover {
+    margin: 0 auto;
+    max-width: min(1100px, 92vw);
+    aspect-ratio: 3 / 2;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .cover img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* ─── BODY + VISITING ─── */
+  .body-wrap {
+    container-type: inline-size;
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: clamp(44px, 6vw, 76px) 24px 0;
+  }
+
+  .body {
+    display: grid;
+    gap: clamp(32px, 4vw, 56px);
+  }
+
+  @container (min-width: 900px) {
+    .body {
+      grid-template-columns: 1.25fr 0.85fr;
+      align-items: start;
+    }
+  }
+
+  /* No left column to sit beside — the panel takes the full measure rather
+     than stranding itself in a narrow track (§9). */
+  .body-panel-only {
+    grid-template-columns: 1fr !important;
+  }
+
+  .statement {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--text-secondary);
+    white-space: pre-line;
+  }
+
+  .pullquote {
+    margin: clamp(28px, 4vw, 40px) 0 0;
+    padding-left: clamp(18px, 2.5vw, 28px);
+    border-left: 1px solid var(--accent);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(19px, 2.6vw, 26px);
+    line-height: 1.45;
+    text-wrap: balance;
+    color: var(--text-primary);
+  }
+
+  .visiting {
+    align-self: start;
+    padding: clamp(22px, 3vw, 30px);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+
+  .visiting-label {
+    margin: 0 0 18px;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .visiting-list {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .visiting-row {
+    display: grid;
+    gap: 3px;
+  }
+
+  .visiting-row dt {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .visiting-row dd {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    /* An address can hold a long unbroken token; this keeps it inside the
+       panel instead of forcing the body to scroll sideways (§11). */
+    overflow-wrap: anywhere;
+  }
+
+  .visiting-detail {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: pre-line;
+  }
+
+  .visiting-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 20px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .visiting-links a {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 2px;
+  }
+
+  .visiting-links a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* ─── SHARED SECTION HEAD (§17 separator pattern) ─── */
+  .gallery,
+  .works {
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: clamp(52px, 7vw, 88px) 24px 0;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    border-top: 1px solid var(--border-strong);
+    padding-top: 22px;
+    margin-bottom: clamp(28px, 4vw, 44px);
+  }
+
+  .section-label {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .section-link {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 2px;
+    white-space: nowrap;
+  }
+
+  .section-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* ─── GALLERY ─── */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(18px, 2.4vw, 28px);
+  }
+
+  @media (min-width: 760px) {
+    .gallery-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .gallery-plate {
+    margin: 0;
+    aspect-ratio: 3 / 2;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .gallery-plate img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* ─── WORKS ON VIEW (mirrors /collections/[slug]) ─── */
+  .works-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  @media (min-width: 640px) {
+    .works-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .works-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .work-link {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .work-thumb {
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+
+  .work-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .work-title {
+    margin: 12px 0 0;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    transition: color var(--dur-base) ease;
+  }
+
+  .work-link:hover .work-title,
+  .work-link:focus-visible .work-title {
+    color: var(--accent);
+  }
+
+  .work-year {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  /* ─── NEIGHBOURS ─── */
+  .neighbours {
+    display: flex;
+    max-width: 1152px;
+    margin: clamp(52px, 7vw, 88px) auto 0;
+    padding: 24px;
+    gap: 24px;
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .neighbour {
+    display: grid;
+    gap: 6px;
+    text-decoration: none;
+    max-width: 45%;
+  }
+
+  /* Pins "Next" right without space-between, which would throw a lone
+     "Next" to the left edge when there is no "Previous" (§6). */
+  .neighbour-next {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .neighbour-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .neighbour-title {
+    font-family: var(--font-serif);
+    font-size: clamp(17px, 2vw, 22px);
+    color: var(--text-primary);
+    transition: color var(--dur-base) ease;
+  }
+
+  .neighbour:hover .neighbour-title,
+  .neighbour:focus-visible .neighbour-title {
+    color: var(--accent);
+  }
+
+  .neighbour:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+  }
+
+  /* ─── CLOSING ─── */
+  .closing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: clamp(40px, 6vw, 64px) clamp(24px, 4vw, 56px);
+    background: var(--bg-secondary);
+  }
+
+  .closing-text {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(18px, 2.4vw, 24px);
+    color: var(--text-secondary);
+  }
+
+  .closing-link {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 3px;
+    transition: opacity var(--dur-base) ease;
+  }
+
+  .closing-link:hover {
+    opacity: 0.68;
+  }
+
+  .closing-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+</style>

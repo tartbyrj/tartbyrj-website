@@ -73,11 +73,16 @@ function venueLine(exhibition: Exhibition): string {
   return [exhibition.venue, exhibition.city, exhibition.country].filter(Boolean).join(', ');
 }
 
-// §6 state D — driven by the primary (index 0) item. The current inventory
-// is a single feature; a mixed image/no-image state across a 2+ cycle set is
-// not a case the locked design specifies, so this stays keyed off the item
-// actually shown by default (no-JS baseline).
-const showImageColumn = Boolean(featured?.coverImage);
+// §6 state D collapses the block to a single centred text column when there
+// is no cover to show. `.some()`, not "does item 0 have one": keying off the
+// first item alone broke both ways as soon as a second show existed —
+// item 0 with a cover and item 1 without rendered an empty 4/3 box on Next,
+// and the reverse dropped the column entirely so item 1's cover could never
+// appear. So the column exists if ANY item in the cycle has a cover, and
+// cover-less items inside it fall back to the bordered pull-quote panel
+// (the same treatment ExhibitionCard uses, per §4). State D is preserved
+// exactly where it was specified: no covers anywhere → no column.
+const showImageColumn = cycleSet.some((exhibition) => Boolean(exhibition.coverImage));
 ---
 
 {featured && (
@@ -97,7 +102,7 @@ const showImageColumn = Boolean(featured?.coverImage);
                 data-ex-plate
                 data-ex-index={i}
               >
-                {exhibition.coverImage && (
+                {exhibition.coverImage ? (
                   <img
                     src={urlFor(exhibition.coverImage).width(800).format('webp').quality(85).fit('max').url()}
                     srcset={coverSrcSet(exhibition.coverImage)}
@@ -109,13 +114,25 @@ const showImageColumn = Boolean(featured?.coverImage);
                     decoding="async"
                     style={`--focus:${coverFocus(exhibition.coverImage)}`}
                   />
+                ) : (
+                  /* Only reachable in a mixed cycle set — see showImageColumn
+                     above. Never an empty box. */
+                  <div class="plate-fallback">
+                    {exhibition.pullQuote && <p class="plate-pullquote">{exhibition.pullQuote}</p>}
+                  </div>
                 )}
               </figure>
             ))}
           </div>
         )}
 
-        <div class="ex-detail-wrap">
+        {/* aria-live: the arrows swap the visible panel without moving
+            focus, so without this a screen-reader user presses "Next
+            exhibition" and hears nothing — the title, dates and venue
+            change silently and the "View details" link retargets under
+            them. polite, not assertive: this is a user-initiated change,
+            not an interruption. */}
+        <div class="ex-detail-wrap" aria-live="polite">
           {cycleSet.map((exhibition, i) => (
             <div
               class:list={['ex-detail', i === 0 && 'is-active']}
@@ -307,6 +324,27 @@ const showImageColumn = Boolean(featured?.coverImage);
     height: 100%;
     object-fit: cover;
     object-position: var(--focus, 50% 50%);
+  }
+
+  .plate-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 24px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-secondary);
+  }
+
+  .plate-pullquote {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(15px, 2.6cqw, 19px);
+    line-height: 1.5;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--text-secondary);
   }
 
   .ex-detail-wrap {

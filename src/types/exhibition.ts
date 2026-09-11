@@ -36,6 +36,12 @@ export const ExhibitionSchema = z.object({
   coverImage: ExhibitionImageSchema.nullish(),
   altText: z.string().nullish(),
   address: z.string().nullish(),
+  // Free display text ("Friday 13 November, 6:00 – 9:00 pm"), not an ISO
+  // instant — the Studio field is a `string`, not a `datetime`, because the
+  // datetime widget resolves input against the editor's own timezone and RJ
+  // authors from two of them. Renders verbatim; nothing parses it. Same
+  // shape and same reasoning as `hours` below. See the comment on this field
+  // in src/sanity/schemas/exhibition.ts before changing either.
   openingReception: z.string().nullish(),
   hours: z.string().nullish(),
   admission: z.string().nullish(),
