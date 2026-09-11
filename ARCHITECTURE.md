@@ -1560,9 +1560,193 @@ match the other; align only the eyebrow.
 
 ---
 
+## 22. Homepage Exhibitions Section
+
+### Structure (locked)
+
+Homepage section 5, `id="exhibitions"`, inserted after The Artist and
+before the footer. One feature block — image left, details right,
+collapsing to stacked below a **520px CONTAINER width** (not a viewport
+media query; see §23's container-query note, which applies here too) —
+plus prev/next arrows. Not a grid, not an auto-advancing carousel: at the
+inventory this site actually has (one or two shows at a time), either
+would read as broken rather than sparse.
+
+Content is deliberately minimal: kicker (type), title, dates, venue, one
+"View details" link, the arrows. No description, no facts grid, no
+second button — that content lives on `/exhibitions` and the detail page
+(§23), one click away.
+
+### Data selection
+
+`getAllExhibitions()` → build the feature set (tense `upcoming` or
+`current`, sorted `startDate` ascending — soonest first, the opposite
+order from `EXHIBITIONS_ALL_QUERY`'s own `startDate desc`). Featured =
+`featureSet[0]`. Empty feature set falls back to the single most recent
+`past` show, with the kicker prefixed "Most recent". No exhibitions at
+all → the component renders nothing, not an empty `<section>` or a
+stray separator.
+
+### States
+
+- **Normal** — as above.
+- **Fallback** (no upcoming/current) — same layout, kicker gains "Most
+  recent", arrows disabled (exactly one item in the fallback set).
+- **Empty** (zero exhibitions) — section omitted entirely.
+- **No cover image** — the block collapses to a single centred text
+  column. Never a grey placeholder box. Cover-less items inside a 2+
+  item cycle set fall back to a bordered pull-quote panel instead of an
+  empty box — the mixed-inventory case a single-item `showImageColumn`
+  check missed the first time this was built (fixed once found; see
+  SESSIONS.md, 2026-09-10).
+
+### Prev/next arrows
+
+Cycle the feature set only, never the full archive. `cycleSet.length <= 1`
+→ both buttons render `disabled` + `aria-disabled="true"`, and the script
+binds nothing at all for that root — not just visually inert, no
+listeners exist. Disabled, not hidden, so the component doesn't change
+shape the day a second show is added. 2+ items: all panels render in the
+DOM, one visible at a time, vanilla JS toggles `.is-active` (instant swap
+under `prefers-reduced-motion`). A screen-reader status announcement
+("Exhibition 2 of 3") lives in its own `.sr-only[aria-live]` node — not on
+the card content itself, which would re-announce the whole card (title,
+dates, venue) on every arrow press. See §23's scoped-class note for a
+related trap hit building this same component.
+
+### Image aspect ratio
+
+4:3 on the image frame at container widths ≥520px. Below that, when the
+layout stacks, the image drops to 3:2. Locked with the rest of §22 —
+do not let this drift independently of the layout breakpoint.
+
+---
+
+## 23. Exhibitions Pages
+
+### Routes (locked)
+
+- `/exhibitions` — hero band (flat `--bg-primary`; the locked design's
+  painted texture bleed is **deliberately deferred** — §18 documents that
+  the footer's texture needed a 16×16px local contrast sweep at rendered
+  scale before shipping, and that measurement hasn't been done for this
+  band), status filter tabs (All / Upcoming / Current / Past, each with a
+  count), one `ExhibitionCard` per exhibition, closing strip.
+- `/exhibitions/[slug]` — back link (pill treatment matching
+  `/works/[slug]` and `/collections/[slug]` — a third inline copy, not a
+  shared component; extracting one would mean editing two already-shipped
+  pages, out of scope for this build), head, cover, statement + a
+  "Visiting" practical-info panel, gallery, works on view, prev/next,
+  closing strip.
+
+### Filter tabs
+
+Client-side only — every card is server-rendered, JS toggles a class.
+**Progressive enhancement is required**: with JS disabled, the tab row
+hides (`noscript`) and every card stays visible; filtering is an
+enhancement, the complete list is the baseline. A tab whose count is 0
+renders as `<span aria-disabled="true">` — no `href`, out of tab order,
+not a clickable dead end.
+
+### Rejected: static routes per tense
+
+Considered `/exhibitions/upcoming`, `/exhibitions/past` etc. (the
+`/works` category-route pattern). Rejected: these collide with
+`/exhibitions/[slug]` and would require reserving "upcoming",
+"current", "past" as forbidden slugs forever. A temporal filter over
+a low single-digit item count earns no SEO value to justify that
+constraint. Do not re-litigate without a slug-collision plan.
+
+### Prev / next — three cases, not two
+
+Repeats a bug that already shipped once on `/collections/[slug]`:
+`(i-1+n)%n` / `(i+1)%n` resolve to the **same index** at `n === 2`, so
+both links point at one identical document. `n<=1` → both null, section
+omitted (never a self-link). `n===2` → **no wrap**: index 0 gets `next`
+only, index 1 gets `prev` only. `n>=3` → wraps. Extracted into
+`getNeighbours()` (`src/lib/exhibitions/neighbours.ts`), pure and
+unit-tested specifically because this shape of bug is easy to reintroduce
+by "simplifying" back to the naive modular arithmetic.
+
+### `openingReception` is plain text, not a `datetime`
+
+Sanity's `datetime` widget resolves what the editor types against the
+**editor's own browser timezone**. RJ authors from both Dubai and Assam,
+so a Dubai show entered from Assam would store an instant off by 1.5
+hours, and no amount of output formatting recovers the intended
+wall-clock time — a companion timezone field would only produce a
+correctly-formatted wrong answer, worse than plain text because it looks
+trustworthy. The field is display-only (not in the `ExhibitionEvent`
+JSON-LD, which uses the exhibition's own `startDate`/`endDate`) and
+doesn't need to be machine-readable, so it's a `string`, rendered
+verbatim, mirroring `hours`. Changed 2026-09-10 while zero exhibition
+documents existed, so it cost no migration — don't revert this back to
+`datetime` on the reasoning that a typed field looks more correct; it
+produces confidently wrong output instead.
+
+### Two silent-failure classes found building this feature
+
+Both invisible to `astro check` and to the browser console — worth
+naming so they aren't reintroduced under a different name.
+
+- **Container queries.** An element cannot respond to its own container
+  query — `container-type` must go on a wrapper, with the `@container`
+  rule targeting an element *inside* it. Putting both on one element
+  fails silently and leaves the layout stuck single-column at full
+  desktop width. Hit twice (`ExhibitionCard`'s media/text split, and the
+  detail page's statement/Visiting-panel split). Thresholds are also
+  measured against the component's own available *container* width, not
+  the viewport — this feature's is 520px, deliberately low; an earlier
+  860px value collapsed to stacked on real laptops because the container
+  never reached it.
+- **Scoped classes across a component boundary.** `<Child class="x" />`
+  stamps `x` onto an element carrying the *child's* Astro scope id, not
+  the parent's — a parent-side rule for `.x` compiles against the wrong
+  id and never matches. Hit twice (`ExhibitionCard`'s `.ex-card-meta` and
+  the detail page's `.head-meta`, both silently `margin-bottom: 0px` on
+  screen). The fix is not `:global()` — that re-creates the same
+  fragility under cover of "working," and breaks again the moment the
+  child renames its class. Let the parent own the spacing instead, with
+  `display: flex` + `gap`. Full writeup: CLAUDE.md, "CSS rules."
+
+### Deferred, with reasons
+
+- **`.ics` "add to calendar."** Revisit once a show date is imminent
+  enough that visitors would actually use it.
+- **Hash-linked tabs, pagination, year grouping.** Noise at current
+  inventory (low single digits). Revisit past roughly a dozen
+  exhibitions.
+
+(Hero texture band deferral is already covered under Routes above —
+do not duplicate it here.)
+
+### Build-time tense drift (known limitation)
+
+The site is static, so tense (upcoming/current/past) freezes at
+deploy time. A show that opens today still reads "Upcoming" until the
+next build runs. No fix implemented yet — recommended mitigation is a
+daily scheduled Cloudflare deploy hook. This is also why no live
+countdown exists anywhere in this feature: a stale "opens in 4 days"
+is worse than a coarse, occasionally-late label.
+
+### Build specs
+
+Implementation is specified in three PRDs, the instructions of record
+for this feature:
+
+| Doc | Covers |
+|---|---|
+| `PRD-Exhibitions-1-Foundation.md` | Schema, Zod type, GROQ queries, shared accessor, tense + date-format utils |
+| `PRD-Exhibitions-2-Homepage-Section.md` | Homepage section 5 (§22) |
+| `PRD-Exhibitions-3-Pages.md` | `/exhibitions` and `/exhibitions/[slug]` (this section) |
+
+---
+
 *This document is the single source of truth for architectural decisions.  
 Update it when decisions change — do not let it go stale.*
 
-*Last updated: 2026-08-14 — Collections index rebuilt as editorial page
-head + alternating rows (§21); `/works` head alignment brought into
-token parity with Collections eyebrow (§21).*
+*Last updated: 2026-09-10 — Exhibitions feature documented: homepage
+section 5 (§22) and `/exhibitions` + `/exhibitions/[slug]` (§23), built
+across PRD 1–3; `openingReception` changed from `datetime` to `string`
+(§23); two silent-failure CSS classes recorded (§23, mirrored in
+CLAUDE.md) after both were hit building this feature.*

@@ -1,0 +1,344 @@
+---
+// The full exhibition record (PRD 3 §3). Hero band, status filter tabs,
+// one card per exhibition, closing strip.
+import Layout from '../../layouts/Layout.astro';
+import ExhibitionCard from '../../components/exhibitions/ExhibitionCard.astro';
+import { getAllExhibitions } from '../../lib/exhibitions/data';
+import { countByTense, type Tense } from '../../lib/exhibitions/tense';
+import { serializeJsonLd } from '../../lib/seo/jsonld';
+
+const exhibitions = await getAllExhibitions();
+
+// One pass over the list, reused by every tab — §7.3 forbids a separate
+// count query, and §9's helper exists so the counts are not recomputed once
+// per tab.
+const counts = countByTense(exhibitions);
+
+const TABS: { id: 'all' | Tense; label: string; count: number }[] = [
+  { id: 'all', label: 'All', count: exhibitions.length },
+  { id: 'upcoming', label: 'Upcoming', count: counts.upcoming },
+  { id: 'current', label: 'Current', count: counts.current },
+  { id: 'past', label: 'Past', count: counts.past },
+];
+
+// Astro.url.pathname, not a hand-written '/exhibitions': the directory
+// build format makes the real URL "/exhibitions/", and Layout's canonical
+// uses that form — a JSON-LD url disagreeing with the page's own canonical
+// is a needless mixed signal. Guarded like Layout.astro's, since
+// new URL(path, undefined) throws and would fail the build outright.
+const pageUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site).toString() : null;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Exhibitions',
+  description: 'Exhibitions, art fairs and mural commissions by Rupjyoti Baruah.',
+  url: pageUrl ?? Astro.url.pathname,
+};
+---
+
+<Layout
+  title="Exhibitions"
+  description="Exhibitions, art fairs and mural commissions by Rupjyoti Baruah — T.Art by RJ."
+>
+  <script type="application/ld+json" slot="jsonld" is:inline set:html={serializeJsonLd(jsonLd)} />
+
+  {/* Flat --bg-primary, deliberately. The locked design shows a painted
+      texture bleeding in from the right here; §3 defers it because §18
+      documents that the footer's texture needed a 16×16px local contrast
+      sweep at rendered scale (slice averages missed real failures) and that
+      measurement has not been done for this band. A flat hero is the correct
+      default until it has been, not a compromise. */}
+  <section class="ex-hero">
+    <p class="ex-hero-eyebrow">Exhibitions</p>
+    <h1 class="ex-hero-title">Where the work has been seen</h1>
+    <p class="ex-hero-sub">Solo and group shows, art fairs, and walls painted in public.</p>
+  </section>
+
+  {exhibitions.length === 0 ? (
+    /* §9 — zero exhibitions: hero plus one quiet line. No tabs, and
+       Layout.astro generates no nav item either. */
+    <section class="ex-empty">
+      <p>
+        No exhibitions are listed just yet. <a href="/works">Browse the works →</a>
+      </p>
+    </section>
+  ) : (
+    <>
+      <section class="ex-list-wrap" data-ex-index>
+        {/* §3 — filtering is an enhancement; the complete list is the
+            baseline. With JS off this row is hidden and every card stays
+            visible, because the cards are all server-rendered and nothing
+            below depends on the script having run. */}
+        <div class="ex-tabs" role="group" aria-label="Filter exhibitions by status">
+          {TABS.map((tab) =>
+            tab.count === 0 ? (
+              /* Count 0 → a span, not a button: no href, no handler, out of
+                 the tab order entirely. Disabled, never hidden, so the row
+                 does not change shape as inventory changes. */
+              <span class="ex-tab is-disabled" aria-disabled="true">
+                {tab.label} <span class="ex-tab-count">{tab.count}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                class:list={['ex-tab', tab.id === 'all' && 'is-active']}
+                data-ex-tab={tab.id}
+                aria-pressed={tab.id === 'all' ? 'true' : 'false'}
+              >
+                {tab.label} <span class="ex-tab-count">{tab.count}</span>
+              </button>
+            )
+          )}
+        </div>
+
+        <div class="ex-list">
+          {exhibitions.map((exhibition) => (
+            <ExhibitionCard exhibition={exhibition} />
+          ))}
+        </div>
+
+        {/* Only reachable once a filter is applied, so it starts hidden. */}
+        <p class="ex-no-match" data-ex-no-match hidden>
+          Nothing in this category yet.
+        </p>
+      </section>
+
+      {/* Filtering is an enhancement; the full list is the baseline. Only
+          the tab row needs hiding — every card is server-rendered visible
+          and nothing but the script ever adds .is-filtered-out, so there is
+          no card state to undo here. */}
+      <noscript>
+        <style is:inline>
+          .ex-tabs { display: none !important; }
+        </style>
+      </noscript>
+    </>
+  )}
+
+  <section class="ex-closing">
+    <p class="ex-closing-text">Can't find what you're looking for?</p>
+    <a class="ex-closing-link" href="/contact">Get in touch →</a>
+  </section>
+</Layout>
+
+<script is:inline>
+  (function () {
+    var root = document.querySelector('[data-ex-index]');
+    if (!root) return;
+
+    var tabs = root.querySelectorAll('[data-ex-tab]');
+    var cards = root.querySelectorAll('[data-ex-card]');
+    var noMatch = root.querySelector('[data-ex-no-match]');
+    if (!tabs.length || !cards.length) return;
+
+    function apply(filter) {
+      var shown = 0;
+      var lastVisible = null;
+      for (var i = 0; i < cards.length; i++) {
+        var match = filter === 'all' || cards[i].getAttribute('data-tense') === filter;
+        // A class, not the hidden attribute: .ex-card is display:grid and
+        // [hidden] { display: none } loses to it on specificity in some
+        // UA sheets. The class sets display directly.
+        cards[i].classList.toggle('is-filtered-out', !match);
+        cards[i].classList.remove('is-last-visible');
+        if (match) {
+          shown++;
+          lastVisible = cards[i];
+        }
+      }
+      // The "no rule under the final card" style cannot be :last-child —
+      // that keys off DOM position, and is-filtered-out hides via
+      // display:none, which :last-child ignores. Filtering therefore left a
+      // stray 1px rule under the visually-last card while suppressing it on
+      // a hidden one. Tagged explicitly instead.
+      if (lastVisible) lastVisible.classList.add('is-last-visible');
+
+      for (var t = 0; t < tabs.length; t++) {
+        var active = tabs[t].getAttribute('data-ex-tab') === filter;
+        tabs[t].classList.toggle('is-active', active);
+        tabs[t].setAttribute('aria-pressed', String(active));
+      }
+
+      if (noMatch) noMatch.hidden = shown > 0;
+    }
+
+    for (var t = 0; t < tabs.length; t++) {
+      (function (tab) {
+        tab.addEventListener('click', function () {
+          apply(tab.getAttribute('data-ex-tab'));
+        });
+      })(tabs[t]);
+    }
+  })();
+</script>
+
+<style>
+  /* ─── HERO BAND ─── */
+  .ex-hero {
+    padding-block: calc(var(--nav-h) + 56px) 48px;
+    padding-inline: clamp(24px, 4vw, 56px);
+    background: var(--bg-primary);
+  }
+
+  .ex-hero-eyebrow {
+    margin: 0 0 18px;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .ex-hero-title {
+    margin: 0;
+    max-width: 18ch;
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-size: clamp(34px, 5.4vw, 62px);
+    line-height: 1.06;
+    text-wrap: balance;
+    color: var(--text-primary);
+  }
+
+  .ex-hero-sub {
+    margin: 20px 0 0;
+    max-width: 52ch;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(16px, 2vw, 20px);
+    color: var(--text-secondary);
+  }
+
+  /* ─── TABS ─── */
+  .ex-list-wrap {
+    padding-inline: clamp(24px, 4vw, 56px);
+    padding-bottom: clamp(60px, 8vw, 100px);
+    background: var(--bg-primary);
+  }
+
+  .ex-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(18px, 3vw, 34px);
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .ex-tab {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 0 0 12px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--dur-base) ease;
+  }
+
+  .ex-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .ex-tab.is-active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+  }
+
+  .ex-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .ex-tab.is-disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .ex-tab-count {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+
+  /* ─── LIST ─── */
+  /* Two selectors, both needed. :last-child is the no-JS baseline, where
+     nothing is ever hidden so DOM-last IS visually last. .is-last-visible
+     is what apply() maintains once filtering is live — :last-child alone
+     was wrong there, because is-filtered-out hides via display:none and
+     :last-child does not notice, stranding a 1px rule under the visually
+     last card. A hidden DOM-last card matching :last-child is harmless. */
+  .ex-list > :global(.ex-card:last-child),
+  .ex-list > :global(.ex-card.is-last-visible) {
+    border-bottom: none;
+  }
+
+  :global(.ex-card.is-filtered-out) {
+    display: none;
+  }
+
+  .ex-no-match {
+    margin: 48px 0 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  /* ─── EMPTY STATE ─── */
+  .ex-empty {
+    padding-inline: clamp(24px, 4vw, 56px);
+    padding-bottom: clamp(60px, 8vw, 100px);
+    background: var(--bg-primary);
+  }
+
+  .ex-empty p {
+    margin: 0;
+    font-size: 15px;
+    color: var(--text-secondary);
+  }
+
+  .ex-empty a {
+    color: var(--accent);
+  }
+
+  /* ─── CLOSING STRIP ─── */
+  .ex-closing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: clamp(40px, 6vw, 64px) clamp(24px, 4vw, 56px);
+    background: var(--bg-secondary);
+  }
+
+  .ex-closing-text {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(18px, 2.4vw, 24px);
+    color: var(--text-secondary);
+  }
+
+  .ex-closing-link {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 3px;
+    transition: opacity var(--dur-base) ease;
+  }
+
+  .ex-closing-link:hover {
+    opacity: 0.68;
+  }
+
+  .ex-closing-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+</style>

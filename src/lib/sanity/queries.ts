@@ -185,3 +185,45 @@ export const ABOUT_QUERY = `
   biography,statement,portrait
 }
 `;
+
+// Feeds the /exhibitions list, the homepage exhibitions section, and the
+// tense/count helpers in src/lib/exhibitions/tense.ts — one fetch serving
+// every route that needs "all exhibitions", same §19 pattern as
+// ALL_ARTWORKS_QUERY. Deliberately does not dereference artworks[] or project
+// gallery[] — both are detail-page-only weight neither the list card nor the
+// homepage section needs.
+//
+// coverImage carries the same select(defined(...)) guard as
+// COLLECTIONS_ALL_QUERY: ExhibitionSchema requires `asset` inside coverImage,
+// so a half-populated image object would fail the whole exhibition in
+// parseList rather than just rendering without a cover. The guard belongs
+// here, where failing is cheap, not in Zod (§19/§21).
+//
+// defined(slug.current) matches every other *_ALL_QUERY in this file: a
+// slug-less draft must not generate a route or a card that links to one.
+export const EXHIBITIONS_ALL_QUERY = `
+*[_type=="exhibition"&&defined(slug.current)]|order(startDate desc){
+  title,slug,type,startDate,endDate,venue,city,country,
+  tagline,excerpt,pullQuote,altText,
+  "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop})
+}
+`;
+
+// The detail page. Same coverImage guard as above, for the same reason —
+// this document is validated by a single safeParse in
+// exhibitions/[slug].astro, so an unguarded half-populated coverImage would
+// take the whole page down rather than just omit the image.
+//
+// artworks[] is dereferenced to exactly the fields the "Works on view"
+// section and its work-card reuse need; gallery[] is projected in full since
+// every installation shot needs its own hotspot/crop for the plates.
+export const EXHIBITION_BY_SLUG_QUERY = `
+*[_type=="exhibition"&&slug.current==$slug][0]{
+  title,slug,type,startDate,endDate,venue,city,country,
+  tagline,excerpt,altText,address,openingReception,hours,admission,
+  statement,pullQuote,link,seo,
+  "coverImage":select(defined(coverImage.asset)=>coverImage{asset,hotspot,crop}),
+  artworks[]->{_id,title,slug,image,year,medium},
+  gallery[]{asset,hotspot,crop,alt}
+}
+`;
